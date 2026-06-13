@@ -1,0 +1,123 @@
+/* Clipboard Item Selection */
+.history-item.selected {
+  outline: var(--card-selected-outline) !important;
+  outline-offset: var(--card-selected-outline-offset) !important;
+  border-color: var(--card-selected-border-color) !important;
+  box-shadow: var(--card-selected-shadow) !important;
+  z-index: 10;
+}
+
+.history-item.selected {
+  background: var(--card-selected-background);
+  color: inherit;
+  transform: none !important;
+}
+.clipboard-detail-overlay {
+  z-index: 2000;
+}
+
+.clipboard-detail-modal {
+  width: min(760px, calc(100vw - 32px));
+  height: min(680px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-primary);
+  border: var(--card-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  box-sizing: border-box;
+  color: var(--text-primary);
+}
+
+.clipboard-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.clipboard-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.clipboard-detail-meta {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.clipboard-detail-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.clipboard-detail-search-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.clipboard-detail-count {
+  min-width: 44px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: right;
+}
+
+.clipboard-detail-textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: var(--input-border);
+  border-radius: 14px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 12px;
+  box-sizing: border-box;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.clipboard-detail-textarea:focus {
+  outline: none;
+  border-color: var(--input-focus-border-color);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.clipboard-detail-message {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--bg-element);
+  border: var(--card-border);
+  border-radius: 10px;
+  padding: 7px 9px;
+}
+
+.clipboard-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.clipboard-detail-actions .confirm-dialog-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
