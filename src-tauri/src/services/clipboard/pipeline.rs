@@ -157,6 +157,19 @@ impl PipelineStage for DiscoveryStage {
         let is_external =
             (content_type == "file" || content_type == "video" || content_type == "image")
                 && !content.starts_with("data:");
+        let clipboard_mode = ctx
+            .app_handle
+            .state::<SettingsState>()
+            .clipboard_mode
+            .lock()
+            .map(|mode| {
+                if mode.as_str() == "work" {
+                    "work".to_string()
+                } else {
+                    "daily".to_string()
+                }
+            })
+            .unwrap_or_else(|_| "daily".to_string());
 
         ctx.entry = Some(ClipboardEntry {
             id: 0,
@@ -172,6 +185,7 @@ impl PipelineStage for DiscoveryStage {
             use_count: 0,
             is_external,
             pinned_order: 0,
+            clipboard_mode,
             file_preview_exists: true,
         });
     }
@@ -316,12 +330,13 @@ impl PipelineStage for ValidationStage {
             let conn = db_state.conn.lock().unwrap();
 
             let mut existing_id = None;
-            let (content, content_type, html_content) = {
+            let (content, content_type, html_content, clipboard_mode) = {
                 let e = ctx.entry.as_ref().unwrap();
                 (
                     e.content.clone(),
                     e.content_type.clone(),
                     e.html_content.clone(),
+                    e.clipboard_mode.clone(),
                 )
             };
 
@@ -368,11 +383,12 @@ impl PipelineStage for ValidationStage {
             };
 
             for t in types_to_check {
-                if let Ok(Some(id)) =
-                    db_state
-                        .repo
-                        .find_by_content_with_conn(&conn, &content, Some(t))
-                {
+                if let Ok(Some(id)) = db_state.repo.find_by_content_with_conn(
+                    &conn,
+                    &content,
+                    Some(t),
+                    &clipboard_mode,
+                ) {
                     if content_type == "rich_text"
                         && t == "rich_text"
                         && !rich_text_html_matches(id)
@@ -382,11 +398,12 @@ impl PipelineStage for ValidationStage {
                     existing_id = Some(id);
                     break;
                 }
-                if let Ok(Some(id)) =
-                    db_state
-                        .repo
-                        .find_by_content_with_conn(&conn, &normalized_content, Some(t))
-                {
+                if let Ok(Some(id)) = db_state.repo.find_by_content_with_conn(
+                    &conn,
+                    &normalized_content,
+                    Some(t),
+                    &clipboard_mode,
+                ) {
                     if content_type == "rich_text"
                         && t == "rich_text"
                         && !rich_text_html_matches(id)
@@ -421,6 +438,9 @@ impl PipelineStage for ValidationStage {
                     None
                 };
                 for item in session.iter() {
+                    if item.clipboard_mode != entry.clipboard_mode {
+                        continue;
+                    }
                     let item_normalized = item.content.trim().replace("\r\n", "\n");
                     let rich_text_match =
                         if entry.content_type == "rich_text" && item.content_type == "rich_text" {
@@ -478,7 +498,7 @@ impl PipelineStage for PersistenceStage {
                 entry.id = id;
                 if let Ok(deleted_ids) = db_state
                     .repo
-                    .enforce_limit_with_conn(&conn, Some(&data_dir))
+                    .enforce_limit_with_conn(&conn, Some(&data_dir), &entry.clipboard_mode)
                 {
                     for rid in deleted_ids {
                         let _ = ctx.app_handle.emit("clipboard-removed", rid);
@@ -507,6 +527,7 @@ impl PipelineStage for PersistenceStage {
                         existing.preview = entry.preview.clone();
                         existing.is_external = entry.is_external;
                         existing.file_preview_exists = entry.file_preview_exists;
+                        existing.clipboard_mode = entry.clipboard_mode.clone();
                         existing.is_pinned = preserved_pinned;
                         existing.pinned_order = preserved_pinned_order;
                         existing.tags = if entry.tags.is_empty() {
@@ -596,7 +617,7 @@ impl PipelineStage for DistributionStage {
             .app_handle
             .emit("clipboard-updated", truncate_entry_for_ui(entry.clone()));
 
-        if settings.persistent.load(Ordering::Relaxed) && entry.id > 0 {
+        if settings.persistent.load(Ordering::Relaxed) && entry.id > 0 && entry.clipboard_mode == "daily" {
             crate::services::cloud_sync::request_cloud_sync(ctx.app_handle.clone());
         }
     }

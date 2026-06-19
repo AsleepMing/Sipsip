@@ -716,6 +716,7 @@ const ClipboardItem = ({
     sensitiveMaskSuffixVisible = 3,
     sensitiveMaskEmailDomain = false,
     quickPasteHint,
+    displayIndex,
     dragControls,
     id,
     compactMode,
@@ -1635,6 +1636,11 @@ const ClipboardItem = ({
                             <GripVertical size={14} />
                         </div>
                     )}
+                    {displayIndex !== undefined && (
+                        <span className="clipboard-index-badge" title={`${t('clipboard_index') || 'Index'} ${displayIndex}`}>
+                            #{displayIndex}
+                        </span>
+                    )}
                     <div className="app-info">
                         {item.is_pinned && !dragControls && <Pin size={10} style={{ color: 'var(--accent-color)', marginRight: '-2px' }} />}
                         {showSourceAppIcon
@@ -2019,6 +2025,7 @@ export default memo(ClipboardItem, (prevProps, nextProps) => {
         prevProps.aiEnabled === nextProps.aiEnabled &&
         prevProps.richTextSnapshotPreview === nextProps.richTextSnapshotPreview &&
         prevProps.showSourceAppIcon === nextProps.showSourceAppIcon &&
+        prevProps.displayIndex === nextProps.displayIndex &&
         prevProps.quickPasteHint?.slot === nextProps.quickPasteHint?.slot &&
         prevProps.quickPasteHint?.combo === nextProps.quickPasteHint?.combo &&
         prevProps.compactMode === nextProps.compactMode &&

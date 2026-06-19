@@ -230,6 +230,30 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_migrations (version) VALUES (11)", [])?;
     }
 
+    // Migration 12: Clipboard daily/work mode isolation
+    if current_version < 12 {
+        if !has_column(conn, "clipboard_history", "clipboard_mode")? {
+            conn.execute(
+                "ALTER TABLE clipboard_history ADD COLUMN clipboard_mode TEXT NOT NULL DEFAULT 'daily'",
+                [],
+            )?;
+        }
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_clipboard_history_mode_time
+                ON clipboard_history (clipboard_mode, is_pinned, pinned_order, timestamp)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.clipboard_mode', 'daily')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.clipboard_index_order', 'asc')",
+            [],
+        )?;
+        conn.execute("INSERT INTO schema_migrations (version) VALUES (12)", [])?;
+    }
+
     Ok(())
 }
 

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { MutableRefObject } from "react";
 import type { AiProfile, AppCleanupPolicy } from "../../features/settings/types";
-import type { QuickPasteModifier, CloudSyncContentPrefs } from "../../features/app/types";
+import type { QuickPasteModifier, ClipboardMode, CloudSyncContentPrefs } from "../../features/app/types";
 import { DEFAULT_CLOUD_SYNC_CONTENT_PREFS } from "../../features/app/types";
 
 const DEFAULT_AI_KEY = import.meta.env.VITE_AI_DEFAULT_API_KEY ?? "";
@@ -42,6 +42,7 @@ interface UseSettingsPostInitOptions {
   setPersistent: (val: boolean) => void;
   setPersistentLimitEnabled: (val: boolean) => void;
   setPersistentLimit: (val: number) => void;
+  setClipboardMode: (val: ClipboardMode) => void;
   setDeduplicate: (val: boolean) => void;
   setCaptureFiles: (val: boolean) => void;
   setCaptureRichText: (val: boolean) => void;
@@ -128,6 +129,7 @@ export const useSettingsPostInit = ({
   setPersistent,
   setPersistentLimitEnabled,
   setPersistentLimit,
+  setClipboardMode,
   setDeduplicate,
   setCaptureFiles,
   setCaptureRichText,
@@ -264,6 +266,7 @@ export const useSettingsPostInit = ({
 
     // Fix: explicitly handle both true and false cases for all boolean settings
     setPersistent(settings["app.persistent"] !== "false");
+    setClipboardMode(settings["app.clipboard_mode"] === "work" ? "work" : "daily");
     setPersistentLimitEnabled(settings["app.persistent_limit_enabled"] !== "false");
     if (settings["app.persistent_limit"]) {
       setPersistentLimit(parseInt(settings["app.persistent_limit"]) || 1000);
@@ -479,6 +482,7 @@ export const useSettingsPostInit = ({
     setPersistent,
     setPersistentLimitEnabled,
     setPersistentLimit,
+    setClipboardMode,
     setDeduplicate,
     setCaptureFiles,
     setCaptureRichText,

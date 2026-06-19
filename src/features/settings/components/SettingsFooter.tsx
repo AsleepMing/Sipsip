@@ -166,7 +166,7 @@ const SettingsFooter = ({
                                     color: 'var(--text-muted)',
                                     marginTop: '2px'
                                 }}>
-                                    正在同步 0.3.4 核心资源...
+                                    正在同步核心资源...
                                 </div>
                             </div>
                         )}

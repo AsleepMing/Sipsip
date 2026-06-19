@@ -17,7 +17,8 @@ type RenderItem = (
   item: ClipboardEntry,
   index: number,
   dragControls?: DragControls,
-  disableLayout?: boolean
+  disableLayout?: boolean,
+  displayIndex?: number
 ) => ReactNode;
 
 interface AppMainContentProps {
@@ -88,7 +89,7 @@ const SortableItem = ({
       }}
     >
       <div style={{ paddingBottom: compactMode ? "2px" : "4px" }}>
-        {renderItem(item, index, controls, true)}
+        {renderItem(item, index, controls, true, index + 1)}
       </div>
     </Reorder.Item>
   );
@@ -328,7 +329,7 @@ const AppMainContent = ({
               ) : null
             }
             renderItem={(item, index, isFirst?: boolean) => {
-              const el = renderItemContent(item, pinnedItems.length + index, undefined, true);
+              const el = renderItemContent(item, pinnedItems.length + index, undefined, true, pinnedItems.length + index + 1);
               if (isFirst && pinnedItems.length === 0) {
                 return (
                   <div className="first-virtual-item" style={{ height: "100%", paddingTop: "4px" }}>

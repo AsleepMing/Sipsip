@@ -45,6 +45,8 @@ git_log_out.txt
 mobile-app/
 # AI tool configs
 .claude/
+.codegraph/
+.reasonix/
 
 # Temporary generated icons
 tmp-generated-icons/

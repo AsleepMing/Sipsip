@@ -30,6 +30,7 @@ export interface ClipboardItemProps {
   sensitiveMaskSuffixVisible?: number;
   sensitiveMaskEmailDomain?: boolean;
   quickPasteHint?: QuickPasteHint;
+  displayIndex?: number;
 
   onSelect: () => void;
   onCopy: (withFormat?: boolean) => void;

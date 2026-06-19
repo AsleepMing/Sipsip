@@ -30,6 +30,7 @@ pub struct SettingsState {
     pub follow_mouse: AtomicBool,
     pub arrow_key_selection: AtomicBool,
     pub main_hotkey: Mutex<String>,
+    pub clipboard_mode: Mutex<String>,
     pub monitors: Mutex<Vec<tauri::Monitor>>,
 }
 

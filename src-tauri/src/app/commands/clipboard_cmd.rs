@@ -1,4 +1,4 @@
-use crate::app_state::{AppDataDir, EncryptionQueueState, SessionHistory};
+use crate::app_state::{AppDataDir, EncryptionQueueState, SessionHistory, SettingsState};
 use crate::database::{self, has_sensitive_tag, DbState};
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::repository::clipboard_repo::ClipboardRepository;
@@ -6,6 +6,22 @@ use crate::infrastructure::repository::tag_repo::TagRepository;
 use crate::services::encryption_queue::{EncryptionAction, EncryptionJob};
 use serde_json;
 use tauri::{AppHandle, Emitter, Manager, State};
+
+fn is_daily_entry(state: &DbState, id: i64) -> bool {
+    state
+        .repo
+        .get_entry_by_id(id)
+        .ok()
+        .flatten()
+        .map(|entry| entry.clipboard_mode == "daily")
+        .unwrap_or(true)
+}
+
+fn request_cloud_sync_for_daily(app_handle: AppHandle, state: &DbState, id: i64) {
+    if id > 0 && is_daily_entry(state, id) {
+        crate::services::cloud_sync::request_cloud_sync(app_handle);
+    }
+}
 
 fn truncate_chars_with_suffix(text: &str, max_chars: usize, suffix: &str) -> String {
     if text.chars().count() <= max_chars {
@@ -33,6 +49,7 @@ pub fn toggle_clipboard_pin(
 ) -> AppResult<i64> {
     let mut real_id = id;
     let mut entry_to_save = None;
+    let mut saved_mode = None;
 
     {
         let mut session_items = session.inner().0.lock().unwrap();
@@ -50,7 +67,12 @@ pub fn toggle_clipboard_pin(
         let data_dir = app_data_dir.0.lock().unwrap().clone();
         if let Ok(new_id) = state.repo.save_with_conn(&conn, &entry, Some(&data_dir)) {
             real_id = new_id;
-            if let Ok(deleted_ids) = state.repo.enforce_limit_with_conn(&conn, Some(&data_dir)) {
+            saved_mode = Some(entry.clipboard_mode.clone());
+            if let Ok(deleted_ids) =
+                state
+                    .repo
+                    .enforce_limit_with_conn(&conn, Some(&data_dir), &entry.clipboard_mode)
+            {
                 for deleted_id in deleted_ids {
                     let _ = app_handle.emit("clipboard-removed", deleted_id);
                 }
@@ -72,7 +94,14 @@ pub fn toggle_clipboard_pin(
     }
     drop(conn);
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
+    let should_sync = if let Some(mode) = saved_mode {
+        mode == "daily"
+    } else {
+        real_id > 0 && is_daily_entry(&state, real_id)
+    };
+    if should_sync {
+        crate::services::cloud_sync::request_cloud_sync(app_handle);
+    }
     Ok(real_id)
 }
 
@@ -98,7 +127,7 @@ pub fn update_tags(
             session_items[index].tags = tags;
             let _ = app_handle.emit("tags-changed", ());
             let _ = app_handle.emit("clipboard-changed", ());
-            crate::services::cloud_sync::request_cloud_sync(app_handle);
+            request_cloud_sync_for_daily(app_handle, &state, new_id);
             return Ok(new_id);
         }
         return Err(AppError::Validation("Item not found".to_string()));
@@ -136,7 +165,7 @@ pub fn update_tags(
     }
     let _ = app_handle.emit("tags-changed", ());
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
+    request_cloud_sync_for_daily(app_handle, &state, id);
     Ok(id)
 }
 
@@ -144,11 +173,23 @@ pub fn update_tags(
 pub async fn add_manual_item(
     app_handle: AppHandle,
     state: State<'_, DbState>,
+    settings: State<'_, SettingsState>,
     content: String,
     content_type: String,
     tags: Vec<String>,
 ) -> AppResult<i64> {
     let preview = truncate_chars_with_suffix(&content, 200, "...");
+    let clipboard_mode = settings
+        .clipboard_mode
+        .lock()
+        .map(|mode| {
+            if mode.as_str() == "work" {
+                "work".to_string()
+            } else {
+                "daily".to_string()
+            }
+        })
+        .unwrap_or_else(|_| "daily".to_string());
 
     let entry = database::ClipboardEntry {
         id: 0,
@@ -164,6 +205,7 @@ pub async fn add_manual_item(
         use_count: 0,
         is_external: false,
         pinned_order: 0,
+        clipboard_mode,
         file_preview_exists: true,
     };
 
@@ -171,7 +213,7 @@ pub async fn add_manual_item(
     let data_dir = app_data_dir.0.lock().unwrap().clone();
     let new_id = state.repo.save(&entry, Some(&data_dir))?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
+    request_cloud_sync_for_daily(app_handle, &state, new_id);
     Ok(new_id)
 }
 
@@ -198,6 +240,6 @@ pub async fn update_item_content(
         .update_entry_content(id, &new_content, &preview)
         .map_err(AppError::from)?;
     let _ = app_handle.emit("clipboard-changed", ());
-    crate::services::cloud_sync::request_cloud_sync(app_handle);
+    request_cloud_sync_for_daily(app_handle, &state, id);
     Ok(())
 }

@@ -58,7 +58,8 @@ type RenderItemContent = (
   item: ClipboardEntry,
   index: number,
   dragControls?: DragControls,
-  disableLayout?: boolean
+  disableLayout?: boolean,
+  displayIndex?: number
 ) => ReactNode;
 
 export const useClipboardItemRenderer = ({
@@ -99,7 +100,7 @@ export const useClipboardItemRenderer = ({
   handleAIAction
 }: UseClipboardItemRendererOptions): { renderItemContent: RenderItemContent } => {
   const renderItemContent = useCallback(
-    (item: ClipboardEntry, index: number, dragControls?: DragControls, disableLayout?: boolean) => {
+    (item: ClipboardEntry, index: number, dragControls?: DragControls, disableLayout?: boolean, displayIndex?: number) => {
       const isSensitiveHidden =
         privacyProtection &&
         (item.tags?.includes("sensitive") ||
@@ -131,6 +132,7 @@ export const useClipboardItemRenderer = ({
           sensitiveMaskSuffixVisible={sensitiveMaskSuffixVisible}
           sensitiveMaskEmailDomain={sensitiveMaskEmailDomain}
           quickPasteHint={quickPasteHintsById[item.id]}
+          displayIndex={displayIndex ?? index + 1}
           onSelect={() => setSelectedIndex(index)}
           onCopy={(withFormat) =>
             copyToClipboard(item.id, item.content, item.content_type, withFormat, item.is_pinned, item.tags || [])

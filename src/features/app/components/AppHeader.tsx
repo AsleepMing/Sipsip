@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -17,6 +18,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
 import { APP_NAME } from "../../../shared/config/brand";
+import type { ClipboardMode } from "../types";
 
 interface AppHeaderProps {
   t: (key: string) => string;
@@ -35,6 +37,10 @@ interface AppHeaderProps {
   isWindowPinned: boolean;
   setIsWindowPinned: (val: boolean) => void;
   clearHistory: () => void;
+  onClearRecent: (durationMs: number) => void;
+  onClearIndexRange: () => void;
+  clipboardMode: ClipboardMode;
+  onClipboardModeChange: (mode: ClipboardMode) => void;
   showSearchBox: boolean;
   search: string;
   setSearch: (val: string) => void;
@@ -75,6 +81,10 @@ const AppHeader = ({
   isWindowPinned,
   setIsWindowPinned,
   clearHistory,
+  onClearRecent,
+  onClearIndexRange,
+  clipboardMode,
+  onClipboardModeChange,
   showSearchBox,
   search,
   setSearch,
@@ -108,6 +118,24 @@ const AppHeader = ({
       case "rich_text": return t('type_rich_text');
       default: return t('type_text') || 'Text';
     }
+  };
+  const [showCleanupMenu, setShowCleanupMenu] = useState(false);
+  const cleanupMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showCleanupMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!cleanupMenuRef.current?.contains(event.target as Node)) {
+        setShowCleanupMenu(false);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [showCleanupMenu]);
+
+  const runCleanupAction = (action: () => void) => {
+    setShowCleanupMenu(false);
+    action();
   };
 
   return (
@@ -149,9 +177,49 @@ const AppHeader = ({
 
         {!showSettings && !showTagManager && !showSnippetPanel && !showEmojiPanel && (
           <>
-            <button className="btn-icon" title={t('clear_history')} onClick={clearHistory}>
-              <Trash2 size={16} />
-            </button>
+            <div className="clipboard-mode-switch" role="group" aria-label={t('clipboard_mode') || 'Clipboard mode'}>
+              <button
+                className={clipboardMode === 'daily' ? 'active' : ''}
+                type="button"
+                title={t('clipboard_mode_daily_hint') || 'Daily clipboard mode'}
+                onClick={() => onClipboardModeChange('daily')}
+              >
+                {t('clipboard_mode_daily') || 'Daily'}
+              </button>
+              <button
+                className={clipboardMode === 'work' ? 'active' : ''}
+                type="button"
+                title={t('clipboard_mode_work_hint') || 'Work clipboard mode'}
+                onClick={() => onClipboardModeChange('work')}
+              >
+                {t('clipboard_mode_work') || 'Work'}
+              </button>
+            </div>
+            <div className="cleanup-menu-anchor" ref={cleanupMenuRef}>
+              <button
+                className={`btn-icon ${showCleanupMenu ? 'active' : ''}`}
+                title={t('clear_history')}
+                onClick={() => setShowCleanupMenu((v) => !v)}
+              >
+                <Trash2 size={16} />
+              </button>
+              {showCleanupMenu && (
+                <div className="cleanup-menu">
+                  <button onClick={() => runCleanupAction(() => onClearRecent(60 * 60 * 1000))}>
+                    {t('clear_recent_1h') || 'Clear recent 1h'}
+                  </button>
+                  <button onClick={() => runCleanupAction(() => onClearRecent(24 * 60 * 60 * 1000))}>
+                    {t('clear_recent_24h') || 'Clear recent 24h'}
+                  </button>
+                  <button onClick={() => runCleanupAction(onClearIndexRange)}>
+                    {t('clear_by_index_range') || 'Clear by index range'}
+                  </button>
+                  <button className="danger" onClick={() => runCleanupAction(clearHistory)}>
+                    {t('clear_history')}
+                  </button>
+                </div>
+              )}
+            </div>
             {tagManagerEnabled && (
               <button className="btn-icon" title={t('tag_manager') || '标签管理'} onClick={() => setShowTagManager(true)}>
                 <Tag size={16} />

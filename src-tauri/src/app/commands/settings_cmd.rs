@@ -176,6 +176,16 @@ pub fn save_setting(
                 *guard = value.clone();
             }
         }
+        "app.clipboard_mode" => {
+            value = if value == "work" {
+                "work".to_string()
+            } else {
+                "daily".to_string()
+            };
+            if let Ok(mut guard) = settings_state.clipboard_mode.lock() {
+                *guard = value.clone();
+            }
+        }
         _ => {}
     }
 

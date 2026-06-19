@@ -1,6 +1,6 @@
 [package]
 name = "sipsip"
-version = "0.3.4"
+version = "1.0.3"
 description = "Sipsip desktop app"
 authors = ["you"]
 edition = "2021"

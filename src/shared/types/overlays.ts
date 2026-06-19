@@ -7,5 +7,13 @@ export type ConfirmDialogState = {
   show: boolean;
   title: string;
   message: string;
-  onConfirm: () => void;
+  input?: {
+    value: string;
+    placeholder?: string;
+    autoFocus?: boolean;
+  };
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: (inputValue?: string) => void;
+  onCancel?: () => void;
 };

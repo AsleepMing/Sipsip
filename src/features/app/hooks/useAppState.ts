@@ -3,6 +3,7 @@ import { DEFAULT_THEME } from "../../../shared/config/themes";
 import type { ClipboardEntry, Locale } from "../../../shared/types";
 import type {
   AppState,
+  ClipboardMode,
   CloudSyncContentPrefs,
   DefaultAppsMap,
   InstalledAppOption,
@@ -62,6 +63,7 @@ export const useAppState = (): AppState => {
   const [persistent, setPersistent] = useState(true);
   const [persistentLimitEnabled, setPersistentLimitEnabled] = useState(true);
   const [persistentLimit, setPersistentLimit] = useState<number>(1000);
+  const [clipboardMode, setClipboardMode] = useState<ClipboardMode>("daily");
   const [appSettings, setAppSettings] = useState<Record<string, string>>({});
   const [defaultApps, setDefaultApps] = useState<DefaultAppsMap>({});
   const [showAppSelector, setShowAppSelector] = useState<string | null>(null);
@@ -248,6 +250,8 @@ export const useAppState = (): AppState => {
     setPersistentLimitEnabled,
     persistentLimit,
     setPersistentLimit,
+    clipboardMode,
+    setClipboardMode,
     appSettings,
     setAppSettings,
     defaultApps,

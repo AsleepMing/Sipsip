@@ -275,6 +275,7 @@ impl TagRepository for SqliteTagRepository {
                     is_external: row.get::<_, i32>(10)? == 1,
                     pinned_order: row.get(11).unwrap_or(0),
                     source_app_path: row.get(12).unwrap_or(None),
+                    clipboard_mode: "daily".to_string(),
                     file_preview_exists: true, // simplified
                 })
             })

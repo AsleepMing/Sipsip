@@ -52,10 +52,10 @@ import { supportsCustomBackground } from "./shared/config/themes";
 import { chooseCustomBackgroundImage } from "./shared/lib/customBackground";
 import type { ClipboardEntry } from "./shared/types";
 import type { QuickPasteHint, VirtualClipboardListHandle } from "./features/clipboard/types";
+import type { ClipboardMode, QuickPasteModifier } from "./features/app/types";
 
 /** Must match privacy blur checks in `useClipboardItemRenderer` / `ClipboardItem`. */
 const BUILTIN_SENSITIVE_TAG_NAMES = ["sensitive", "密码", "password"] as const;
-import type { QuickPasteModifier } from "./features/app/types";
 import {
   forceHideCompactPreviewWindow,
   isCompactPreviewWindowSupported,
@@ -64,6 +64,8 @@ import {
 } from "./features/clipboard/lib/compactPreviewControls";
 import { isMacPlatform } from "./shared/lib/platform";
 import { isTauriRuntime } from "./shared/lib/tauriRuntime";
+
+const normalizeClipboardMode = (mode?: string): ClipboardMode => (mode === "work" ? "work" : "daily");
 
 const insertHistoryItem = (list: ClipboardEntry[], item: ClipboardEntry) => {
   const next = list.slice();
@@ -185,6 +187,8 @@ const App = () => {
     setPersistentLimitEnabled,
     persistentLimit,
     setPersistentLimit,
+    clipboardMode,
+    setClipboardMode,
     appSettings,
     setAppSettings,
     setDefaultApps,
@@ -625,6 +629,7 @@ const App = () => {
     setPersistent,
     setPersistentLimitEnabled,
     setPersistentLimit,
+    setClipboardMode,
     setDeduplicate,
     setCaptureFiles,
     setCaptureRichText,
@@ -795,6 +800,9 @@ const App = () => {
 
   useClipboardEvents({
     onUpdated: (updatedItem) => {
+      if (normalizeClipboardMode(updatedItem.clipboard_mode) !== clipboardMode) {
+        return;
+      }
       setHistory(prev => {
         const withoutItem = prev.filter(item => item.id !== updatedItem.id);
         return insertHistoryItem(withoutItem, updatedItem);
@@ -906,6 +914,78 @@ const App = () => {
       .catch(console.error);
   }, []);
 
+  const switchClipboardMode = useCallback(
+    async (nextMode: ClipboardMode, options?: { clearWorkCache?: boolean }) => {
+      const previousMode = clipboardMode;
+      setClipboardMode(nextMode);
+      setHistory([]);
+      setCurrentOffset(0);
+      setHasMore(true);
+      setSelectedIndex(0);
+      setRevealedIds(new Set());
+
+      try {
+        await invoke("save_setting", { key: "app.clipboard_mode", value: nextMode });
+        if (options?.clearWorkCache) {
+          await invoke("clear_clipboard_history_by_mode", { clipboardMode: "work" });
+        }
+        await fetchHistory(true);
+        pushToast(
+          `${t("clipboard_mode_switched") || "Switched to"}${t(
+            nextMode === "work" ? "clipboard_mode_work" : "clipboard_mode_daily"
+          )}`,
+          1800
+        );
+      } catch (err) {
+        setClipboardMode(previousMode);
+        await invoke("save_setting", { key: "app.clipboard_mode", value: previousMode }).catch(console.error);
+        await fetchHistory(true);
+        pushToast(`${t("clipboard_mode_switch_failed") || "Mode switch failed"}: ${err}`, 3000);
+      }
+    },
+    [
+      clipboardMode,
+      fetchHistory,
+      pushToast,
+      setClipboardMode,
+      setCurrentOffset,
+      setHasMore,
+      setHistory,
+      setRevealedIds,
+      setSelectedIndex,
+      t
+    ]
+  );
+
+  const handleClipboardModeChange = useCallback(
+    (nextMode: ClipboardMode) => {
+      if (nextMode === clipboardMode) return;
+
+      if (clipboardMode === "work" && nextMode === "daily") {
+        openConfirm({
+          title: t("exit_work_mode_title") || "Exit work mode",
+          message:
+            t("exit_work_mode_message") ||
+            "Leave work mode now? You can keep the work-mode cache or clear it before returning to daily mode.",
+          confirmLabel: t("exit_work_mode_clear") || "Clear work cache",
+          cancelLabel: t("exit_work_mode_keep") || "Keep work cache",
+          onConfirm: () => {
+            closeConfirm();
+            void switchClipboardMode("daily", { clearWorkCache: true });
+          },
+          onCancel: () => {
+            closeConfirm();
+            void switchClipboardMode("daily", { clearWorkCache: false });
+          }
+        });
+        return;
+      }
+
+      void switchClipboardMode(nextMode);
+    },
+    [clipboardMode, closeConfirm, openConfirm, switchClipboardMode, t]
+  );
+
   useSettingsSync({
     settingsLoaded,
     deduplicate,
@@ -1007,6 +1087,87 @@ const App = () => {
     search,
     typeFilter
   });
+
+  const handleClearRecent = useCallback(
+    (durationMs: number) => {
+      const hours = Math.round(durationMs / (60 * 60 * 1000));
+      openConfirm({
+        title: t("clear_recent_history") || "Clear recent history",
+        message:
+          (t("clear_recent_confirm") || "Clear recent clipboard items in the current mode?") +
+          ` (${hours}${t("hours_short") || "h"})`,
+        onConfirm: async () => {
+          try {
+            const removed = await invoke<number>("clear_recent_clipboard_history", { durationMs });
+            await fetchHistory(true);
+            pushToast(`${t("cleared_items") || "Cleared"}: ${removed}`, 2500);
+          } catch (err) {
+            pushToast(`${t("clear_failed") || "Clear failed"}: ${err}`, 3000);
+          }
+          closeConfirm();
+        }
+      });
+    },
+    [closeConfirm, fetchHistory, openConfirm, pushToast, t]
+  );
+
+  const handleClearIndexRange = useCallback(() => {
+    openConfirm({
+      title: t("clear_by_index_range") || "Clear by index range",
+      message: t("clear_index_range_prompt") || "Enter visible index range, for example 3-10",
+      input: {
+        value: "",
+        placeholder: "3-10",
+        autoFocus: true
+      },
+      confirmLabel: t("delete") || "Delete",
+      onConfirm: async (inputValue) => {
+        const match = (inputValue || "").trim().match(/^(\d+)\s*(?:-|~|,|，|至|到)\s*(\d+)$/);
+        if (!match) {
+          pushToast(t("clear_index_range_invalid") || "Invalid index range", 2500);
+          return;
+        }
+
+        const start = Number(match[1]);
+        const end = Number(match[2]);
+        if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
+          pushToast(t("clear_index_range_invalid") || "Invalid index range", 2500);
+          return;
+        }
+
+        const min = Math.min(start, end);
+        const max = Math.max(start, end);
+        const targets = filteredHistory
+          .slice(min - 1, max)
+          .filter((item) => !item.is_pinned);
+
+        if (targets.length === 0) {
+          pushToast(t("clear_index_range_empty") || "No deletable items in this range", 2500);
+          return;
+        }
+
+        openConfirm({
+          title: t("clear_by_index_range") || "Clear by index range",
+          message: `${t("clear_index_range_confirm") || "Delete visible items in range"} #${min}-#${max}? (${targets.length})`,
+          confirmLabel: t("delete") || "Delete",
+          onConfirm: async () => {
+            try {
+              const removed = await invoke<number>("delete_clipboard_entries", {
+                ids: targets.map((item) => item.id)
+              });
+              const targetIds = new Set(targets.map((item) => item.id));
+              setHistory((prev) => prev.filter((item) => !targetIds.has(item.id)));
+              pushToast(`${t("cleared_items") || "Cleared"}: ${removed}`, 2500);
+            } catch (err) {
+              pushToast(`${t("clear_failed") || "Clear failed"}: ${err}`, 3000);
+              await fetchHistory(true);
+            }
+            closeConfirm();
+          }
+        });
+      }
+    });
+  }, [closeConfirm, fetchHistory, filteredHistory, openConfirm, pushToast, setHistory, t]);
 
   const effectiveHasMore = hasMore && filteredHistory.length >= PAGE_SIZE;
 
@@ -1152,6 +1313,10 @@ const App = () => {
         isWindowPinned={isWindowPinned}
         setIsWindowPinned={setIsWindowPinned}
         clearHistory={clearHistory}
+        onClearRecent={handleClearRecent}
+        onClearIndexRange={handleClearIndexRange}
+        clipboardMode={clipboardMode}
+        onClipboardModeChange={handleClipboardModeChange}
         showSearchBox={showSearchBox}
         search={search}
         setSearch={setSearch}
@@ -1238,10 +1403,12 @@ const App = () => {
         title={confirmDialog.title}
         message={confirmDialog.message}
         theme={theme}
-        confirmLabel={t('confirm')}
-        cancelLabel={t('cancel')}
+        input={confirmDialog.input}
+        confirmLabel={confirmDialog.confirmLabel || t('confirm')}
+        cancelLabel={confirmDialog.cancelLabel || t('cancel')}
         onClose={closeConfirm}
         onConfirm={confirmDialog.onConfirm}
+        onCancel={confirmDialog.onCancel}
       />
 
       <UpdateDialog

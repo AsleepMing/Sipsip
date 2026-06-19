@@ -14,5 +14,6 @@ export interface ClipboardEntry {
   use_count?: number;
   is_external?: boolean;
   pinned_order?: number;
+  clipboard_mode?: "daily" | "work";
   file_preview_exists?: boolean;
 }

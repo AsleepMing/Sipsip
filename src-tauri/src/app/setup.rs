@@ -205,6 +205,7 @@ pub struct StartupSettings {
     pub window_width: Option<u32>,
     pub window_height: Option<u32>,
     pub main_hotkey: String,
+    pub clipboard_mode: String,
     pub arrow_key_selection: bool,
     pub auto_close_server: bool,
 }
@@ -331,6 +332,17 @@ fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .get("app.hotkey")
             .unwrap_or(Some("Win+V".to_string()))
             .unwrap_or("Win+V".to_string()),
+        clipboard_mode: repo
+            .get("app.clipboard_mode")
+            .unwrap_or(Some("daily".to_string()))
+            .map(|v| {
+                if v == "work" {
+                    "work".to_string()
+                } else {
+                    "daily".to_string()
+                }
+            })
+            .unwrap_or_else(|| "daily".to_string()),
         arrow_key_selection: repo
             .get("app.arrow_key_selection")
             .unwrap_or(Some("false".to_string()))
@@ -396,6 +408,7 @@ fn setup_state(
         follow_mouse: AtomicBool::new(s.follow_mouse),
         arrow_key_selection: AtomicBool::new(s.arrow_key_selection),
         main_hotkey: std::sync::Mutex::new(s.main_hotkey.clone()),
+        clipboard_mode: std::sync::Mutex::new(s.clipboard_mode.clone()),
         monitors: std::sync::Mutex::new(Vec::new()),
     });
 

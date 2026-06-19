@@ -5,6 +5,9 @@ const emptyConfirm: ConfirmDialogState = {
   show: false,
   title: "",
   message: "",
+  input: undefined,
+  confirmLabel: undefined,
+  cancelLabel: undefined,
   onConfirm: () => {}
 };
 
@@ -24,12 +27,28 @@ export const useOverlays = () => {
   }, []);
 
   const openConfirm = useCallback(
-    (opts: { title: string; message: string; onConfirm: () => void }) => {
+    (opts: {
+      title: string;
+      message: string;
+      input?: {
+        value: string;
+        placeholder?: string;
+        autoFocus?: boolean;
+      };
+      confirmLabel?: string;
+      cancelLabel?: string;
+      onConfirm: (inputValue?: string) => void;
+      onCancel?: () => void;
+    }) => {
       setConfirmDialog({
         show: true,
         title: opts.title,
         message: opts.message,
-        onConfirm: opts.onConfirm
+        input: opts.input,
+        confirmLabel: opts.confirmLabel,
+        cancelLabel: opts.cancelLabel,
+        onConfirm: opts.onConfirm,
+        onCancel: opts.onCancel
       });
     },
     []

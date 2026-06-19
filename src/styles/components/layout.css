@@ -98,6 +98,85 @@ header {
   box-sizing: border-box;
 }
 
+.clipboard-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.clipboard-mode-switch button {
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 8px;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.clipboard-mode-switch button:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.clipboard-mode-switch button.active {
+  color: #ffffff;
+  background: var(--accent-color);
+  box-shadow: 0 8px 16px rgba(var(--accent-color-rgb), 0.22);
+}
+
+.cleanup-menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.cleanup-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1000;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cleanup-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 9px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cleanup-menu button:hover {
+  background: var(--hover-bg);
+}
+
+.cleanup-menu button.danger {
+  color: var(--danger-color, #ef4444);
+}
+
 .search-container {
   position: relative;
   width: 100%;

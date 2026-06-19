@@ -539,7 +539,8 @@ mod tests {
                 tags TEXT NOT NULL DEFAULT '[]',
                 use_count INTEGER NOT NULL DEFAULT 0,
                 is_external INTEGER NOT NULL DEFAULT 0,
-                pinned_order INTEGER NOT NULL DEFAULT 0
+                pinned_order INTEGER NOT NULL DEFAULT 0,
+                clipboard_mode TEXT NOT NULL DEFAULT 'daily'
             )",
             [],
         )
@@ -597,6 +598,7 @@ mod tests {
             use_count: 0,
             is_external: false,
             pinned_order: 0,
+            clipboard_mode: "daily".to_string(),
             file_preview_exists: true,
         };
 
@@ -608,7 +610,9 @@ mod tests {
         assert!(id > 0);
 
         // 2. 测试获取
-        let history = repo.get_history(10, 0, None).expect("获取历史失败");
+        let history = repo
+            .get_history(10, 0, None, "daily")
+            .expect("获取历史失败");
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content, "Hello Integration Test");
         assert_eq!(history[0].source_app, "TestApp");

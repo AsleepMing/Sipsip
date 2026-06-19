@@ -21,6 +21,8 @@ pub struct ClipboardEntry {
     pub is_external: bool, // New field to track if content is a file path
     #[serde(default)]
     pub pinned_order: i64, // For manual sorting of pinned items
+    #[serde(default = "default_clipboard_mode")]
+    pub clipboard_mode: String,
     #[serde(default = "default_true")]
     pub file_preview_exists: bool, // Transient field: does the file exist on disk?
 }
@@ -39,4 +41,8 @@ pub struct SnippetEntry {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_clipboard_mode() -> String {
+    "daily".to_string()
 }

@@ -5,7 +5,19 @@ interface UseAppActionsOptions {
   t: (key: string) => string;
   mqttEnabled: boolean;
   cloudSyncEnabled: boolean;
-  openConfirm: (opts: { title: string; message: string; onConfirm: () => void }) => void;
+  openConfirm: (opts: {
+    title: string;
+    message: string;
+    input?: {
+      value: string;
+      placeholder?: string;
+      autoFocus?: boolean;
+    };
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: (inputValue?: string) => void;
+    onCancel?: () => void;
+  }) => void;
   closeConfirm: () => void;
   pushToast: (msg: string, duration?: number) => number;
   fetchHistory: (reset?: boolean) => Promise<void>;

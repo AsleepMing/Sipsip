@@ -589,7 +589,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                             if let Ok(conn) = db_state.conn.lock() {
                                 if let Ok(None) = db_state
                                     .repo
-                                    .find_by_content_with_conn(&conn, &content, None)
+                                    .find_by_content_with_conn(&conn, &content, None, "daily")
                                 {
                                     should_process = true;
                                 }

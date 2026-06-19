@@ -71,10 +71,34 @@ body:has(.modal-overlay) #root {
 
 .confirm-dialog-message {
   font-size: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   line-height: 1.6;
   color: var(--text-primary);
   opacity: 0.8;
+}
+
+.confirm-dialog-input {
+  width: 100%;
+  margin-bottom: 22px;
+  padding: 11px 13px;
+  border: var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  box-shadow: var(--input-shadow);
+  font-size: 14px;
+  font-weight: var(--input-font-weight);
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+.confirm-dialog-input::placeholder {
+  color: var(--text-muted);
+}
+
+.confirm-dialog-input:focus {
+  border-color: var(--input-focus-border-color);
+  box-shadow: var(--input-focus-shadow);
 }
 
 .confirm-dialog-buttons {

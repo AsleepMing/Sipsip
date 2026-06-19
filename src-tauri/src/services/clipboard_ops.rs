@@ -369,6 +369,7 @@ pub async fn paste_history_item_by_index(
     let history = crate::app::commands::history_cmd::get_clipboard_history(
         app_handle.state::<DbState>(),
         app_handle.state::<SessionHistory>(),
+        app_handle.state::<SettingsState>(),
         (index + 1) as i32,
         0,
         None,
@@ -1322,8 +1323,17 @@ fn handle_post_paste_actions(
         let app_data = app_handle.state::<crate::app_state::AppDataDir>();
         let data_dir = app_data.0.lock().unwrap();
 
-        if state.repo.delete(id, Some(&data_dir)).is_ok() {
-            let _ = app_handle.emit("clipboard-removed", id);
+        if id > 0 {
+            if let Ok(Some(entry)) = state.repo.get_entry_by_id(id) {
+                let deleted = if entry.clipboard_mode == "work" {
+                    state.repo.delete_without_sync(id, Some(&data_dir)).is_ok()
+                } else {
+                    state.repo.delete(id, Some(&data_dir)).is_ok()
+                };
+                if deleted {
+                    let _ = app_handle.emit("clipboard-removed", id);
+                }
+            }
         }
     } else if id > 0 {
         let _ = state.repo.increment_use_count(id);
@@ -1375,6 +1385,7 @@ pub fn paste_latest_rich(app_handle: tauri::AppHandle) {
         let history = crate::app::commands::history_cmd::get_clipboard_history(
             app_handle_clone.state::<DbState>(),
             app_handle_clone.state::<SessionHistory>(),
+            app_handle_clone.state::<SettingsState>(),
             1,
             0, // offset
             None,

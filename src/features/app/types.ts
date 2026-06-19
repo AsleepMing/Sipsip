@@ -8,6 +8,7 @@ export type InstalledAppOption = { label: string; value: string };
 export type DefaultAppsMap = Record<string, string>;
 export type QuickPasteModifier = "disabled" | "ctrl" | "alt" | "shift" | "win";
 export type SettingsSubpage = "home" | "advanced" | "theme-store";
+export type ClipboardMode = "daily" | "work";
 
 export type CloudSyncContentPrefs = {
   text: boolean;
@@ -68,6 +69,8 @@ export interface AppState {
   setPersistentLimitEnabled: StateSetter<boolean>;
   persistentLimit: number;
   setPersistentLimit: StateSetter<number>;
+  clipboardMode: ClipboardMode;
+  setClipboardMode: StateSetter<ClipboardMode>;
   appSettings: Record<string, string>;
   setAppSettings: StateSetter<Record<string, string>>;
   defaultApps: DefaultAppsMap;
