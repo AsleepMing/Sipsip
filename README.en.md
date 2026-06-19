@@ -1,12 +1,12 @@
 <p align="left">
-  <img src="docs/images/logo.png" width="32" vertical-align="middle" />
+  <img src="docs/images/logo.png?v=2" width="32" vertical-align="middle" />
   <b>Sipsip</b> · a fast, tidy, local-first clipboard workflow tool.
 </p>
 
 ---
 
 <div align="center">
-  <img src="docs/images/logo.png" alt="Sipsip Hero Logo" width="300" />
+  <img src="docs/images/logo.png?v=2" alt="Sipsip Hero Logo" width="300" />
 
   ### **STAY FAST. STAY TIDY.**
 
@@ -66,6 +66,13 @@ One-click cleanup of clipboard records within a time window for the current mode
 - Clean last **24 hours**
 - Refreshes the history list after cleanup; triggers cloud sync in Daily mode
 
+### 📝 Snippet Management
+
+- Save frequently used text as **reusable snippets** with category and tag support.
+- One-click "Save as Snippet" from clipboard history, or create manually in the snippet panel.
+- Search snippets by title, content, category, or tags; copy or paste directly to the active window.
+- Automatic usage count tracking to surface your most-used snippets.
+
 ### 🔍 Foundation
 
 - Local-first clipboard history: text, rich text, images, and files
@@ -121,7 +128,6 @@ Recommended release setup:
 
 - This repo keeps compatibility cleanup for old `TieZ` installs and data folders so existing local data can migrate into Sipsip.
 - Work mode is intended for temporary local material; pinned or tagged records are still protected by cleanup rules unless explicitly changed later.
-- The planned snippet feature is intentionally not included in this release.
 
 ## Release History
 

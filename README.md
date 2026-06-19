@@ -1,12 +1,12 @@
 <p align="left">
-  <img src="docs/images/logo.png" width="32" vertical-align="middle" />
+  <img src="docs/images/logo.png?v=2" width="32" vertical-align="middle" />
   <b>Sipsip</b> · 一个快速、整洁、本地优先的剪贴板工作流工具。
 </p>
 
 ---
 
 <div align="center">
-  <img src="docs/images/logo.png" alt="Sipsip Hero Logo" width="300" />
+  <img src="docs/images/logo.png?v=2" alt="Sipsip Hero Logo" width="300" />
 
   ### **STAY FAST. STAY TIDY.**
 
@@ -66,6 +66,13 @@ v1.0.0 引入的日常 / 工作双模式在 v1.0.3 中进一步加固了隔离�
 - 清理最近 **24 小时**
 - 清理完成后刷新历史列表，日常模式下自动触发云同步请求
 
+### 📝 片段管理
+
+- 将常用文本保存为**可复用片段**，支持分类和标签管理。
+- 从剪贴板历史一键"转为片段"，或在片段面板手动创建。
+- 片段支持搜索（标题、内容、分类、标签）、直接复制或粘贴到当前窗口。
+- 使用次数自动统计，方便找到最常用的片段。
+
 ### 🔍 基础能力
 
 - 本地优先的剪贴板历史：文本、富文本、图片、文件
@@ -121,7 +128,6 @@ src-tauri/target/release/sipsip.exe
 
 - 仓库保留了对旧 `TieZ` 安装和数据目录的兼容清理逻辑，方便现有本地数据迁移到 Sipsip。
 - 工作模式主要用于临时本地内容；置顶或带标签记录仍受清理保护，除非后续单独增加危险确认。
-- 片段功能暂未包含在本次发布中。
 
 ## 发布记录
 
