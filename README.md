@@ -17,41 +17,63 @@
 
 ## Overview
 
-Sipsip is a desktop clipboard manager built with Tauri, Rust, and React. It is designed for high-frequency daily work: capture clipboard history locally, search and tag important items, paste quickly, and keep temporary work material separated from your everyday clipboard.
+Sipsip is a desktop clipboard manager built with Tauri, Rust, and React, designed for high-frequency daily work. All clipboard data is stored locally with fast search, tag organization, and convenient paste workflows. It provides Daily / Work mode isolation to keep temporary work content separate from your everyday clipboard.
 
-Version `1.0.3` is the latest stable release, including the Sipsip branding, cleaned dependency baseline, clipboard cleanup tools, visible index deletion, isolated Daily / Work clipboard modes, batch deletion performance fixes, and themed dialog improvements.
+## What's New in v1.0.3
 
-## Highlights
+### 🚀 Batch Deletion Performance
 
-- Local-first clipboard history for text, rich text, images, and files.
-- Fast search, tags, pinned items, and sequential paste workflows.
-- Visible list index badges and deletion by visible index range.
-- Recent cleanup actions for the current mode, such as last 1 hour or 24 hours.
-- Daily / Work clipboard modes with local isolation; Work mode content is excluded from cloud sync.
-- Optional LAN file transfer plus WebDAV / MQTT sync paths.
-- Privacy masking for sensitive previews and multiple polished desktop themes.
+Previously, deleting by index range (e.g. `13-121`) issued per-item concurrent backend calls, each triggering a UI refresh — causing noticeable lag.
 
-## What Is New In 1.0.3
+Now a **single batch call** `delete_clipboard_entries(ids)` handles deduplication, pinned-item skipping, per-entry mode-aware deletion, and emits only one `clipboard-changed` event. The frontend adds **80ms debounced merging** so dense event bursts trigger just one UI update.
 
-- Fixed batch deletion performance: large index-range deletions (e.g. `13-121`) now use a single `delete_clipboard_entries` backend call instead of per-item concurrent deletes.
-- Added 80ms debounced merge for dense `clipboard-changed` events to prevent UI refresh storms.
-- Fixed index-range input dialog focus on Windows: the themed input now correctly receives keyboard focus without triggering system alert sounds.
-- Improved work-mode cleanup: work-mode deletion and cleanup paths no longer write cloud-sync tombstones.
-- Isolated live `clipboard-updated` events, session history, and persistence quota eviction by clipboard mode.
+### 🎯 Input Dialog Focus Fix
 
-More detail is available in [`docs/releases/v1.0.3.md`](docs/releases/v1.0.3.md).
+On Windows, clicking the index-range input previously caused a system alert sound and failed to accept keyboard input — the themed dialog wasn't properly acquiring Tauri window focus.
 
-## What Is New In 1.0.0
+The fix coordinates `activate_window_focus` on auto-focus, mouse-down, and focus events, while blocking keydown propagation to global keyboard navigation, ensuring a smooth input experience.
 
-- Added current-mode cleanup for recent clipboard records.
-- Added visible index badges and index-range deletion.
-- Added Daily / Work mode switching in the header.
-- Isolated clipboard database queries, duplicate detection, session history, and live update events by mode.
-- Prevented Work mode cleanup and deletion paths from writing cloud-sync tombstones.
-- Replaced the native browser prompt for index-range deletion with the themed app dialog.
-- Removed unused development dependencies that caused unnecessary audit surface.
+### 🔒 Work Mode Isolation Hardening
 
-More detail is available in [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md).
+The Daily / Work dual mode introduced in v1.0.0 is further hardened in v1.0.3:
+
+- **Live event isolation**: `clipboard-updated` events carry `clipboard_mode` and are only inserted when matching the current mode.
+- **Session history isolation**: Non-persistent `SessionHistory` is filtered by mode, preventing cross-mode cache pollution when persistence is disabled.
+- **Deletion path isolation**: Work-mode deletes, clears, recent cleanup, post-paste deletion, and quota eviction all use the **no-tombstone** path — work content never leaks through cloud sync.
+- **Remote deletion safety**: Cloud-sync remote deletions only affect Daily-mode records.
+
+## v1.0.0 Core Features
+
+### 📋 Daily / Work Modes
+
+A segmented switch in the header toggles between modes:
+
+- **Daily mode**: Regular clipboard history, eligible for cloud sync.
+- **Work mode**: Isolated local content area, excluded from cloud sync by default. On leaving Work mode, you can keep or clear the work cache; cleanup does not write cloud-sync tombstones.
+
+### 🏷️ Visible Index & Range Deletion
+
+- Each clipboard record shows a **visible index badge** based on the current filtered, searched, and pinned-sorted display order.
+- Delete by index range, e.g. `3-10` removes visible records 3 through 10.
+- The input uses the app's themed dialog instead of the native browser prompt.
+- Pinned records are protected during range deletion.
+
+### ⏱️ Recent Time-Range Cleanup
+
+One-click cleanup of clipboard records within a time window for the current mode:
+
+- Clean last **1 hour**
+- Clean last **24 hours**
+- Refreshes the history list after cleanup; triggers cloud sync in Daily mode
+
+### 🔍 Foundation
+
+- Local-first clipboard history: text, rich text, images, and files
+- Fast search, tag management, pinned items, and sequential paste workflows
+- Optional LAN file transfer (Axum HTTP server + WebSocket)
+- WebDAV / MQTT cross-device sync
+- Privacy masking for sensitive previews
+- Multiple polished desktop themes
 
 ## Local Development
 
@@ -100,3 +122,12 @@ Recommended release setup:
 - This repo keeps compatibility cleanup for old `TieZ` installs and data folders so existing local data can migrate into Sipsip.
 - Work mode is intended for temporary local material; pinned or tagged records are still protected by cleanup rules unless explicitly changed later.
 - The planned snippet feature is intentionally not included in this release.
+
+## Release History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| v1.0.3 | 2026-06-19 | Batch deletion performance, input focus fix, work-mode isolation hardening |
+| v1.0.0 | 2026-06-19 | First independent release: Daily/Work modes, index-range deletion, recent cleanup |
+
+Detailed release notes are in the [`docs/releases/`](docs/releases/) directory.
