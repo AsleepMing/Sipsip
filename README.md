@@ -1,6 +1,6 @@
 <p align="left">
   <img src="docs/images/logo.png" width="32" vertical-align="middle" />
-  <b>Sipsip</b> · a fast, tidy, local-first clipboard workflow tool.
+  <b>Sipsip</b> · 一个快速、整洁、本地优先的剪贴板工作流工具。
 </p>
 
 ---
@@ -10,99 +10,99 @@
 
   ### **STAY FAST. STAY TIDY.**
 
-  [English](./README.md) | [简体中文](./README.zh-CN.md)
+  [English](./README.en.md) | [简体中文](./README.md)
 </div>
 
 ---
 
-## Overview
+## 项目简介
 
-Sipsip is a desktop clipboard manager built with Tauri, Rust, and React, designed for high-frequency daily work. All clipboard data is stored locally with fast search, tag organization, and convenient paste workflows. It provides Daily / Work mode isolation to keep temporary work content separate from your everyday clipboard.
+Sipsip 是一个基于 Tauri + Rust + React 的桌面剪贴板管理工具，面向高频日常使用场景。所有剪贴板数据本地存储，支持快速搜索、标签整理、便捷粘贴，并提供日常 / 工作双模式隔离，让临时工作内容与日常剪贴板互不干扰。
 
-## What's New in v1.0.3
+## v1.0.3 新增功能
 
-### 🚀 Batch Deletion Performance
+### 🚀 批量删除性能优化
 
-Previously, deleting by index range (e.g. `13-121`) issued per-item concurrent backend calls, each triggering a UI refresh — causing noticeable lag.
+之前按序号范围删除（如 `13-121`）会逐条并发调用后端删除接口，每条删除都触发一次 UI 刷新，导致界面卡顿。
 
-Now a **single batch call** `delete_clipboard_entries(ids)` handles deduplication, pinned-item skipping, per-entry mode-aware deletion, and emits only one `clipboard-changed` event. The frontend adds **80ms debounced merging** so dense event bursts trigger just one UI update.
+现在改为**单次批量调用** `delete_clipboard_entries(ids)`，后端一次性完成去重、跳过置顶、按条目真实模式删除，并只发出一次 `clipboard-changed` 事件。前端额外增加了 **80ms 防抖合并**，即使短时间内收到大量刷新事件，也只会触发一次 UI 更新。
 
-### 🎯 Input Dialog Focus Fix
+### 🎯 输入弹窗焦点修复
 
-On Windows, clicking the index-range input previously caused a system alert sound and failed to accept keyboard input — the themed dialog wasn't properly acquiring Tauri window focus.
+Windows 下点击序号范围输入框后，之前会出现系统提示音且无法输入——原因是弹窗输入框没有正确获取 Tauri 主窗口焦点。
 
-The fix coordinates `activate_window_focus` on auto-focus, mouse-down, and focus events, while blocking keydown propagation to global keyboard navigation, ensuring a smooth input experience.
+修复后，输入框在自动聚焦、鼠标按下和 focus 时都会调用 `activate_window_focus`，同时阻止 keydown 事件冒泡到全局键盘导航，确保输入体验流畅。
 
-### 🔒 Work Mode Isolation Hardening
+### 🔒 工作模式隔离进一步完善
 
-The Daily / Work dual mode introduced in v1.0.0 is further hardened in v1.0.3:
+v1.0.0 引入的日常 / 工作双模式在 v1.0.3 中进一步加固了隔离边界：
 
-- **Live event isolation**: `clipboard-updated` events carry `clipboard_mode` and are only inserted when matching the current mode.
-- **Session history isolation**: Non-persistent `SessionHistory` is filtered by mode, preventing cross-mode cache pollution when persistence is disabled.
-- **Deletion path isolation**: Work-mode deletes, clears, recent cleanup, post-paste deletion, and quota eviction all use the **no-tombstone** path — work content never leaks through cloud sync.
-- **Remote deletion safety**: Cloud-sync remote deletions only affect Daily-mode records.
+- **实时事件隔离**：`clipboard-updated` 事件携带的 `clipboard_mode` 必须匹配当前模式才插入列表，避免另一模式的新复制内容短暂闪入。
+- **会话历史隔离**：非持久化的 `SessionHistory` 也按模式过滤，关闭持久化时不会出现跨模式缓存污染。
+- **删除路径隔离**：工作模式下的删除、清空、最近清理、粘贴后删除、持久化限额淘汰全部走**无云同步 tombstone** 路径，确保工作内容不会通过云同步泄露。
+- **远端删除安全**：云同步远端删除只影响日常模式记录，不会误删工作模式中的同内容条目。
 
-## v1.0.0 Core Features
+## v1.0.0 核心功能
 
-### 📋 Daily / Work Modes
+### 📋 日常 / 工作模式
 
-A segmented switch in the header toggles between modes:
+在首页 Header 提供分段切换按钮，一键切换日常模式和工作模式：
 
-- **Daily mode**: Regular clipboard history, eligible for cloud sync.
-- **Work mode**: Isolated local content area, excluded from cloud sync by default. On leaving Work mode, you can keep or clear the work cache; cleanup does not write cloud-sync tombstones.
+- **日常模式**：常规剪贴板历史，支持云同步。
+- **工作模式**：临时本地内容隔离区，默认不参与云同步。退出工作模式时可选择保留或清理工作缓存，清理时不写入云同步删除标记。
 
-### 🏷️ Visible Index & Range Deletion
+### 🏷️ 可见序号与范围删除
 
-- Each clipboard record shows a **visible index badge** based on the current filtered, searched, and pinned-sorted display order.
-- Delete by index range, e.g. `3-10` removes visible records 3 through 10.
-- The input uses the app's themed dialog instead of the native browser prompt.
-- Pinned records are protected during range deletion.
+- 剪贴板列表每条记录旁显示**可见序号**，序号基于当前过滤、搜索、置顶排序后的实际显示顺序计算。
+- 支持按序号范围删除，例如输入 `3-10` 删除第 3 到第 10 条可见记录。
+- 输入框使用应用主题化弹窗，不再使用浏览器原生输入框。
+- 置顶记录在范围删除中受保护，不会被误删。
 
-### ⏱️ Recent Time-Range Cleanup
+### ⏱️ 最近时间范围清理
 
-One-click cleanup of clipboard records within a time window for the current mode:
+一键清理当前模式下指定时间范围内的剪贴记录：
 
-- Clean last **1 hour**
-- Clean last **24 hours**
-- Refreshes the history list after cleanup; triggers cloud sync in Daily mode
+- 清理最近 **1 小时**
+- 清理最近 **24 小时**
+- 清理完成后刷新历史列表，日常模式下自动触发云同步请求
 
-### 🔍 Foundation
+### 🔍 基础能力
 
-- Local-first clipboard history: text, rich text, images, and files
-- Fast search, tag management, pinned items, and sequential paste workflows
-- Optional LAN file transfer (Axum HTTP server + WebSocket)
-- WebDAV / MQTT cross-device sync
-- Privacy masking for sensitive previews
-- Multiple polished desktop themes
+- 本地优先的剪贴板历史：文本、富文本、图片、文件
+- 快速搜索、标签管理、置顶和顺序粘贴工作流
+- 可选的局域网文件传输（基于 Axum HTTP 服务器 + WebSocket）
+- WebDAV / MQTT 跨设备同步路径
+- 敏感信息预览脱敏
+- 多套桌面主题和界面效果
 
-## Local Development
+## 本地开发
 
 ```bash
 npm install
 npm run tauri:dev
 ```
 
-Production web build:
+前端生产构建：
 
 ```bash
 npm run build
 ```
 
-Desktop release build:
+桌面 release 构建：
 
 ```bash
 npm run tauri:build
 ```
 
-On Windows with the current bundle configuration, the release executable is generated at:
+在当前 bundle 配置下，Windows 会生成 release 可执行文件：
 
 ```text
 src-tauri/target/release/sipsip.exe
 ```
 
-## Independent Release Setup
+## 独立发布前配置
 
-Before publishing this fork on your own GitHub, review:
+准备发布到你自己的 GitHub 前，建议先检查：
 
 - `.env.example`
 - `src/shared/config/brand.ts`
@@ -110,24 +110,24 @@ Before publishing this fork on your own GitHub, review:
 - `docs/releases/v1.0.3.md`
 - `docs/releases/v1.0.0.md`
 
-Recommended release setup:
+推荐做法：
 
-- Fill `VITE_APP_GITHUB_URL`, `VITE_APP_WEBSITE_URL`, and `VITE_FEEDBACK_EMAIL` in a local `.env`.
-- Keep `VITE_ENABLE_UPDATER=false` until you have your own updater endpoint ready.
-- Configure `VITE_ANNOUNCEMENT_PING_URL` and `VITE_THEME_STORE_API_BASE` only if you really need those remote services.
-- Update Tauri bundle targets if you need platform installers beyond the current release executable.
+- 在本地 `.env` 中填写 `VITE_APP_GITHUB_URL`、`VITE_APP_WEBSITE_URL`、`VITE_FEEDBACK_EMAIL`。
+- 在自己的更新端点准备好之前，保持 `VITE_ENABLE_UPDATER=false`。
+- 只有在确实需要远程服务时，再配置 `VITE_ANNOUNCEMENT_PING_URL` 和 `VITE_THEME_STORE_API_BASE`。
+- 如果需要 Windows 安装包或更多平台安装器，继续调整 Tauri bundle targets。
 
-## Notes
+## 说明
 
-- This repo keeps compatibility cleanup for old `TieZ` installs and data folders so existing local data can migrate into Sipsip.
-- Work mode is intended for temporary local material; pinned or tagged records are still protected by cleanup rules unless explicitly changed later.
-- The planned snippet feature is intentionally not included in this release.
+- 仓库保留了对旧 `TieZ` 安装和数据目录的兼容清理逻辑，方便现有本地数据迁移到 Sipsip。
+- 工作模式主要用于临时本地内容；置顶或带标签记录仍受清理保护，除非后续单独增加危险确认。
+- 片段功能暂未包含在本次发布中。
 
-## Release History
+## 发布记录
 
-| Version | Date | Highlights |
-|---------|------|------------|
-| v1.0.3 | 2026-06-19 | Batch deletion performance, input focus fix, work-mode isolation hardening |
-| v1.0.0 | 2026-06-19 | First independent release: Daily/Work modes, index-range deletion, recent cleanup |
+| 版本 | 日期 | 重点 |
+|------|------|------|
+| v1.0.3 | 2026-06-19 | 批量删除性能优化、输入弹窗焦点修复、工作模式隔离加固 |
+| v1.0.0 | 2026-06-19 | 首个独立发布版本：日常/工作模式、序号范围删除、最近时间清理 |
 
-Detailed release notes are in the [`docs/releases/`](docs/releases/) directory.
+详细发布说明见 [`docs/releases/`](docs/releases/) 目录。
