@@ -121,9 +121,7 @@ pub fn save_setting(
                 .store(value == "true", Ordering::Relaxed);
         }
         "app.sound_paste_enabled" => {
-            settings_state
-                .delete_after_paste
-                .store(value != "false", Ordering::Relaxed);
+            value = (value != "false").to_string();
         }
         "app.persistent" => {
             settings_state
@@ -575,6 +573,54 @@ pub fn set_tray_visible(
         .map_err(AppError::from)
 }
 
+pub fn apply_dock_visibility(app_handle: &AppHandle, visible: bool) -> AppResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        app_handle
+            .set_activation_policy(policy)
+            .map_err(AppError::from)?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_handle;
+        let _ = visible;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_dock_visible(app_handle: AppHandle, visible: bool) -> AppResult<()> {
+    apply_dock_visibility(&app_handle, visible)?;
+    let db_state = app_handle.state::<DbState>();
+    db_state
+        .settings_repo
+        .set("app.hide_dock_icon", &(!visible).to_string())
+        .map_err(AppError::from)
+}
+
+#[tauri::command]
+pub fn set_quick_paste_modifier(
+    state: State<'_, crate::app_state::SettingsState>,
+    db_state: State<'_, DbState>,
+    modifier: String,
+) -> AppResult<()> {
+    let normalized = normalize_quick_paste_modifier(&modifier).to_string();
+    if let Ok(mut guard) = state.quick_paste_modifier.lock() {
+        *guard = normalized.clone();
+    }
+    db_state
+        .settings_repo
+        .set("app.quick_paste_modifier", &normalized)
+        .map_err(AppError::from)
+}
+
 #[tauri::command]
 pub fn set_edge_docking(
     app_handle: AppHandle,
@@ -587,6 +633,11 @@ pub fn set_edge_docking(
         .settings_repo
         .set("app.edge_docking", &enabled.to_string())
         .map_err(AppError::from)
+}
+
+#[tauri::command]
+pub fn stop_cloud_sync_client(app_handle: AppHandle) {
+    crate::services::cloud_sync::stop_cloud_sync_client(app_handle);
 }
 
 #[tauri::command]

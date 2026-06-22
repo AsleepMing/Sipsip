@@ -202,7 +202,6 @@ impl TagRepository for SqliteTagRepository {
         // Remove from saved_tags
         let _ = conn.execute("DELETE FROM saved_tags WHERE name = ?", params![name]);
 
-        // Delete all entries that carry this tag
         let mut stmt = conn
             .prepare("SELECT entry_id FROM entry_tags WHERE tag = ?")
             .map_err(|e| e.to_string())?;
@@ -212,30 +211,15 @@ impl TagRepository for SqliteTagRepository {
             .filter_map(Result::ok)
             .collect();
 
-        for id in ids {
-            if let Some(dir) = data_dir {
-                let attachments_dir = dir.join("attachments");
-                let mut stmt_content = conn
-                    .prepare("SELECT content, is_external FROM clipboard_history WHERE id = ?")
-                    .map_err(|e| e.to_string())?;
+        let _ = data_dir;
 
-                if let Ok(entry) = stmt_content.query_row([id], |row| {
-                    let content_raw: String = row.get(0)?;
-                    let is_ext: i32 = row.get(1)?;
-                    Ok((content_raw, is_ext == 1))
-                }) {
-                    if entry.1 {
-                        // is_external
-                        let content_path = self.maybe_decrypt_text(&entry.0);
-                        let path = std::path::Path::new(&content_path);
-                        if path.starts_with(&attachments_dir) && path.exists() {
-                            let _ = std::fs::remove_file(path);
-                        }
-                    }
-                }
-            }
-            let _ = conn.execute("DELETE FROM entry_tags WHERE entry_id = ?", params![id]);
-            let _ = conn.execute("DELETE FROM clipboard_history WHERE id = ?", params![id]);
+        for id in ids {
+            conn.execute(
+                "DELETE FROM entry_tags WHERE entry_id = ? AND tag = ?",
+                params![id, name],
+            )
+            .map_err(|e| e.to_string())?;
+            Self::refresh_entry_tags_json(&conn, id)?;
         }
         Ok(())
     }
@@ -243,10 +227,10 @@ impl TagRepository for SqliteTagRepository {
     fn get_entries_by_tag(&self, tag: &str) -> Result<Vec<ClipboardEntry>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(
-            "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path 
+            "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
              FROM clipboard_history ch
              INNER JOIN entry_tags et ON ch.id = et.entry_id
-             WHERE et.tag = ? 
+             WHERE et.tag = ?
              ORDER BY ch.is_pinned DESC, ch.pinned_order DESC, ch.timestamp DESC",
         ).map_err(|e| e.to_string())?;
 
@@ -275,7 +259,7 @@ impl TagRepository for SqliteTagRepository {
                     is_external: row.get::<_, i32>(10)? == 1,
                     pinned_order: row.get(11).unwrap_or(0),
                     source_app_path: row.get(12).unwrap_or(None),
-                    clipboard_mode: "daily".to_string(),
+                    clipboard_mode: row.get(13).unwrap_or_else(|_| "daily".to_string()),
                     file_preview_exists: true, // simplified
                 })
             })

@@ -41,6 +41,17 @@
     gap: 6px;
 }
 
+.active-search-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.active-tag-filter {
+    border: none;
+}
+
 .tag-chip {
     display: inline-flex;
     align-items: center;

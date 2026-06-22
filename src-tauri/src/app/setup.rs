@@ -85,6 +85,10 @@ pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
     // 6. Window Initialization (Pinned/Focus)
     setup_main_window(app, &settings);
+    let _ = crate::app::commands::settings_cmd::apply_dock_visibility(
+        &app_handle,
+        !settings.hide_dock_icon,
+    );
 
     // 6.1 External Drag-Drop (Web Images)
     #[cfg(windows)]
@@ -199,6 +203,7 @@ pub struct StartupSettings {
     pub quick_paste_modifier: String,
     pub sound_enabled: bool,
     pub hide_tray_icon: bool,
+    pub hide_dock_icon: bool,
     pub edge_docking: bool,
     pub follow_mouse: bool,
     pub window_pinned: bool,
@@ -300,6 +305,11 @@ fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .unwrap_or(false),
         hide_tray_icon: repo
             .get("app.hide_tray_icon")
+            .unwrap_or(Some("false".to_string()))
+            .map(|v| v == "true")
+            .unwrap_or(false),
+        hide_dock_icon: repo
+            .get("app.hide_dock_icon")
             .unwrap_or(Some("false".to_string()))
             .map(|v| v == "true")
             .unwrap_or(false),

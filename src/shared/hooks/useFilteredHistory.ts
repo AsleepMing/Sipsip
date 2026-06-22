@@ -5,15 +5,18 @@ interface UseFilteredHistoryOptions {
   history: ClipboardEntry[];
   search: string;
   typeFilter: string | null;
+  tagFilter: string | null;
 }
 
 export const useFilteredHistory = ({
   history,
   search,
-  typeFilter
+  typeFilter,
+  tagFilter
 }: UseFilteredHistoryOptions) => {
   return useMemo(() => {
-    const lowerSearch = search.toLowerCase();
+    const lowerSearch = search.trim().toLowerCase();
+    const selectedTag = tagFilter?.trim().toLowerCase() || null;
 
     const filtered = history.filter((item) => {
       if (typeFilter && item.content_type !== typeFilter) {
@@ -22,15 +25,19 @@ export const useFilteredHistory = ({
 
       let effectiveSearch = lowerSearch;
       const isTagSearch = effectiveSearch.startsWith("tag:");
+      const effectiveTag = selectedTag || (isTagSearch ? effectiveSearch.slice(4).trim() : null);
       if (isTagSearch) {
-        effectiveSearch = effectiveSearch.slice(4);
+        effectiveSearch = "";
+      }
+
+      if (effectiveTag) {
+        const matchesTag = selectedTag
+          ? item.tags?.some((tag) => tag.toLowerCase() === effectiveTag)
+          : item.tags?.some((tag) => tag.toLowerCase().includes(effectiveTag));
+        if (!matchesTag) return false;
       }
 
       if (!effectiveSearch) return true;
-
-      if (isTagSearch) {
-        return item.tags?.some((tag) => tag.toLowerCase().includes(effectiveSearch)) ?? false;
-      }
 
       return (
         item.content?.toLowerCase().includes(effectiveSearch) ||
@@ -51,5 +58,5 @@ export const useFilteredHistory = ({
       }
       return b.timestamp - a.timestamp;
     });
-  }, [history, search, typeFilter]);
+  }, [history, search, typeFilter, tagFilter]);
 };

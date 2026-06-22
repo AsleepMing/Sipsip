@@ -49,6 +49,8 @@ interface AppHeaderProps {
   showTagFilter: boolean;
   setShowTagFilter: (val: boolean) => void;
   allTags: string[];
+  tagFilter: string | null;
+  setTagFilter: (val: string | null) => void;
   searchIsFocused: boolean;
   setSearchIsFocused: (val: boolean) => void;
   setEditingTagsId: (val: number | null) => void;
@@ -93,6 +95,8 @@ const AppHeader = ({
   showTagFilter,
   setShowTagFilter,
   allTags,
+  tagFilter,
+  setTagFilter,
   searchIsFocused,
   setSearchIsFocused,
   setEditingTagsId,
@@ -266,7 +270,7 @@ const AppHeader = ({
 
     {!showSettings && !showTagManager && !showSnippetPanel && !showEmojiPanel && (
       <AnimatePresence>
-        {(showSearchBox || search.trim().length > 0) && (
+        {(showSearchBox || search.trim().length > 0 || tagFilter) && (
           <motion.div
             initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
             animate={{
@@ -313,6 +317,41 @@ const AppHeader = ({
                   }}
                   style={{ color: colorMode === 'dark' ? '#ffffff' : undefined }}
                 />
+                {(search.trim().length > 0 || tagFilter) && (
+                  <button
+                    type="button"
+                    className="search-clear-button"
+                    title={t('clear_search')}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSearch("");
+                      setTagFilter(null);
+                      setShowTagFilter(false);
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+                {tagFilter && (() => {
+                  const tagBackground = getTagColor(tagFilter, theme);
+                  return (
+                    <div className="active-search-tags">
+                      <button
+                        type="button"
+                        className="tag-chip active-tag-filter"
+                        title={tagFilter}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setTagFilter(null);
+                        }}
+                        style={{ background: tagBackground, color: getTagTextColor(tagBackground) }}
+                      >
+                        #{tagFilter}
+                        <X size={10} />
+                      </button>
+                    </div>
+                  );
+                })()}
                 {showTagFilter && searchIsFocused && allTags.length > 0 && (
                   <div className="tags-dropdown">
                     <div className="tags-label">{t('tags') || "Tags"}</div>
@@ -325,7 +364,7 @@ const AppHeader = ({
                             key={tag}
                             onMouseDown={(e) => {
                               e.preventDefault();
-                              setSearch("tag:" + tag);
+                              setTagFilter(tag);
                               setShowTagFilter(false);
                             }}
                             data-tag={tag}
@@ -355,6 +394,22 @@ const AppHeader = ({
                   }
                 }}
               >
+                <button
+                  className={`btn-icon ${typeFilter === null ? 'active' : ''}`}
+                  onClick={() => setTypeFilter(null)}
+                  style={{
+                    width: 'auto',
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    opacity: typeFilter === null ? 1 : 0.7
+                  }}
+                  title={t('type_all')}
+                >
+                  {t('type_all')}
+                </button>
                 {['text', 'image', 'file', 'url', 'code', 'video', 'rich_text'].map(t => (
                   <button
                     key={t}

@@ -19,6 +19,42 @@
 
 Sipsip is a desktop clipboard manager built with Tauri, Rust, and React, designed for high-frequency daily work. All clipboard data is stored locally with fast search, tag organization, and convenient paste workflows. It provides Daily / Work mode isolation to keep temporary work content separate from your everyday clipboard.
 
+## v1.0.5 Fix
+
+v1.0.5 fixes rich-text category visible-index range deletion appearing to succeed while items still remain in the list.
+
+- Normal paginated history fetch now sends `contentType` to the Tauri backend, so rich-text/type filters paginate at the SQL layer.
+- Delete commands now check affected database rows to avoid future false-success deletes.
+- The actual database integrity check passed; this was not database corruption.
+
+## v1.0.4 Patch Release
+
+v1.0.4 is a patch release that fully verifies the previous tag filtering, type filtering, search, and deletion maintenance work, with all version metadata aligned.
+
+### 🏷️ Tag Filter Cleanup
+
+Tag clicks now use an independent `tagFilter` state instead of injecting `tag:` internal tokens into the visible search box, keeping it clean.
+
+### 🔍 Search & Type Filtering
+
+The backend search interface now accepts a `content_type` parameter, so rich-text/image/file type filtering is applied at the SQL query layer instead of post-filtering a limited frontend result set. The header adds an explicit "Clear filter" button and an "All" content-type option.
+
+### 🗑️ Safe Tag Deletion
+
+Global tag deletion only removes tag relationships and refreshes item tag JSON — it does not delete clipboard entries themselves.
+
+### 🌐 Index Deletion i18n
+
+Index-range input now supports `3-10`, `3到10`, `3至10`, and single-index formats.
+
+### 🗣️ Language Consistency
+
+`zh`, `en`, and `tw` translation key sets are fully aligned (522 keys each).
+
+### 📦 Windows Portable Package
+
+New `Sipsip-v1.0.4-windows-portable.zip` package for no-install usage.
+
 ## What's New in v1.0.3
 
 ### 🚀 Batch Deletion Performance
@@ -114,6 +150,8 @@ Before publishing this fork on your own GitHub, review:
 - `.env.example`
 - `src/shared/config/brand.ts`
 - `src-tauri/tauri.conf.json`
+- `docs/releases/v1.0.5.md`
+- `docs/releases/v1.0.4.md`
 - `docs/releases/v1.0.3.md`
 - `docs/releases/v1.0.0.md`
 
@@ -133,6 +171,8 @@ Recommended release setup:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.0.5 | 2026-06-22 | Fix rich-text category range deletion refresh mismatch |
+| v1.0.4 | 2026-06-22 | Tag/search/delete regression verification, language key consistency fix, Windows portable package |
 | v1.0.3 | 2026-06-19 | Batch deletion performance, input focus fix, work-mode isolation hardening |
 | v1.0.0 | 2026-06-19 | First independent release: Daily/Work modes, index-range deletion, recent cleanup |
 

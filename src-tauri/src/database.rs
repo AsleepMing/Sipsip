@@ -619,6 +619,59 @@ mod tests {
     }
 
     #[test]
+    fn test_get_history_filters_content_type_and_delete_removes_entry() {
+        let conn = setup_test_db();
+        let conn_arc = Arc::new(Mutex::new(conn));
+        let repo = SqliteClipboardRepository::new(conn_arc);
+
+        let mut text_entry = ClipboardEntry {
+            id: 0,
+            content_type: "text".to_string(),
+            content: "plain text".to_string(),
+            html_content: None,
+            source_app: "TestApp".to_string(),
+            source_app_path: None,
+            timestamp: 300,
+            preview: "plain text".to_string(),
+            is_pinned: false,
+            tags: vec![],
+            use_count: 0,
+            is_external: false,
+            pinned_order: 0,
+            clipboard_mode: "daily".to_string(),
+            file_preview_exists: true,
+        };
+        let text_id = repo.save(&text_entry, None).expect("save text failed");
+
+        text_entry.content_type = "rich_text".to_string();
+        text_entry.content = "rich text 1".to_string();
+        text_entry.html_content = Some("<b>rich text 1</b>".to_string());
+        text_entry.preview = "rich text 1".to_string();
+        text_entry.timestamp = 200;
+        let rich_id = repo.save(&text_entry, None).expect("save rich text failed");
+
+        let rich_history = repo
+            .get_history(10, 0, Some("rich_text"), "daily")
+            .expect("get rich history failed");
+        assert_eq!(rich_history.len(), 1);
+        assert_eq!(rich_history[0].id, rich_id);
+        assert_eq!(rich_history[0].content_type, "rich_text");
+
+        repo.delete(rich_id, None).expect("delete rich text failed");
+
+        let rich_history_after_delete = repo
+            .get_history(10, 0, Some("rich_text"), "daily")
+            .expect("get rich history after delete failed");
+        assert!(rich_history_after_delete.is_empty());
+
+        let text_history = repo
+            .get_history(10, 0, Some("text"), "daily")
+            .expect("get text history failed");
+        assert_eq!(text_history.len(), 1);
+        assert_eq!(text_history[0].id, text_id);
+    }
+
+    #[test]
     fn test_settings_persistence() {
         let conn = setup_test_db();
         let conn_arc = Arc::new(Mutex::new(conn));

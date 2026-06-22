@@ -5,8 +5,8 @@ use crate::database::{
 use crate::domain::models::ClipboardEntry;
 use crate::infrastructure::encryption;
 use crate::infrastructure::repository::settings_repo::SqliteSettingsRepository;
-use rusqlite::params;
 use rusqlite::Connection;
+use rusqlite::{params, params_from_iter, ToSql};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -49,6 +49,7 @@ pub trait ClipboardRepository {
         limit: i32,
         tag_only: bool,
         clipboard_mode: &str,
+        content_type: Option<&str>,
     ) -> Result<Vec<ClipboardEntry>, String>;
     fn delete(&self, id: i64, data_dir: Option<&std::path::Path>) -> Result<(), String>;
     fn delete_without_sync(
@@ -540,15 +541,26 @@ impl SqliteClipboardRepository {
             let _ = self.upsert_tombstone_with_conn(conn, &content_type, content_hash, now_ms());
         }
 
-        conn.execute("DELETE FROM clipboard_history WHERE id = ?", [id])
+        let affected = conn
+            .execute("DELETE FROM clipboard_history WHERE id = ?", [id])
             .map_err(|e| e.to_string())?;
+        if affected == 0 {
+            return Err(format!("clipboard entry not found for delete: {}", id));
+        }
         let _ = conn.execute("DELETE FROM entry_tags WHERE entry_id = ?", params![id]);
         Ok(())
     }
 
     pub fn delete_metadata_with_conn(&self, conn: &Connection, id: i64) -> Result<(), String> {
-        conn.execute("DELETE FROM clipboard_history WHERE id = ?", params![id])
+        let affected = conn
+            .execute("DELETE FROM clipboard_history WHERE id = ?", params![id])
             .map_err(|e| e.to_string())?;
+        if affected == 0 {
+            return Err(format!(
+                "clipboard entry not found for metadata delete: {}",
+                id
+            ));
+        }
         let _ = conn.execute("DELETE FROM entry_tags WHERE entry_id = ?", params![id]);
         Ok(())
     }
@@ -587,8 +599,12 @@ impl SqliteClipboardRepository {
             }
         }
 
-        conn.execute("DELETE FROM clipboard_history WHERE id = ?", [id])
+        let affected = conn
+            .execute("DELETE FROM clipboard_history WHERE id = ?", [id])
             .map_err(|e| e.to_string())?;
+        if affected == 0 {
+            return Err(format!("clipboard entry not found for delete: {}", id));
+        }
         let _ = conn.execute("DELETE FROM entry_tags WHERE entry_id = ?", params![id]);
         Ok(())
     }
@@ -996,6 +1012,9 @@ impl ClipboardRepository for SqliteClipboardRepository {
 
         let mut history = Vec::new();
         for (entry, content_raw, preview_raw, html_raw) in mapped_rows {
+            #[cfg(feature = "portable")]
+            let _ = (&content_raw, &preview_raw, &html_raw);
+
             #[cfg(not(feature = "portable"))]
             {
                 let is_sensitive = has_sensitive_tag(&entry.tags);
@@ -1031,6 +1050,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
         limit: i32,
         tag_only: bool,
         clipboard_mode: &str,
+        content_type: Option<&str>,
     ) -> Result<Vec<ClipboardEntry>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
 
@@ -1039,31 +1059,55 @@ impl ClipboardRepository for SqliteClipboardRepository {
             return Ok(Vec::new());
         }
 
+        let content_type_filter = content_type
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let type_clause = if content_type_filter.is_some() {
+            " AND ch.content_type = ?4"
+        } else {
+            ""
+        };
+        #[cfg(not(feature = "portable"))]
+        let sensitive_type_clause = if content_type_filter.is_some() {
+            " AND ch.content_type = ?6"
+        } else {
+            ""
+        };
+
         #[cfg(feature = "portable")]
         {
             // Portable version: Data is NOT encrypted, use conventional SQL LIKE search (fastest)
             let sql = if tag_only {
-                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
+                format!("SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
                  FROM clipboard_history ch
                  INNER JOIN entry_tags et ON ch.id = et.entry_id
-                 WHERE et.tag LIKE '%' || ?1 || '%'
+                 WHERE ch.clipboard_mode = ?1{}
+                   AND et.tag LIKE '%' || ?2 || '%'
                  ORDER BY ch.timestamp DESC
-                 LIMIT ?3"
+                 LIMIT ?3", type_clause)
             } else {
-                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
+                format!("SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
                  FROM clipboard_history ch
                  LEFT JOIN entry_tags et ON ch.id = et.entry_id
-                 WHERE ch.content LIKE '%' || ?1 || '%'
-                    OR ch.source_app LIKE '%' || ?1 || '%'
-                    OR et.tag LIKE '%' || ?1 || '%'
+                 WHERE ch.clipboard_mode = ?1{}
+                   AND (
+                    ch.content LIKE '%' || ?2 || '%'
+                    OR ch.source_app LIKE '%' || ?2 || '%'
+                    OR et.tag LIKE '%' || ?2 || '%'
+                   )
                  ORDER BY ch.timestamp DESC
-                 LIMIT ?3"
+                 LIMIT ?3", type_clause)
             };
 
-            let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let mut query_params: Vec<&dyn ToSql> = vec![&clipboard_mode, &term, &limit];
+            if let Some(ref ct) = content_type_filter {
+                query_params.push(ct);
+            }
 
             let rows = stmt
-                .query_map(params![clipboard_mode, term, limit], |row| {
+                .query_map(params_from_iter(query_params), |row| {
                     let tags_str: String =
                         row.get::<_, String>(8).unwrap_or_else(|_| "[]".to_string());
                     Ok(ClipboardEntry {
@@ -1113,28 +1157,28 @@ impl ClipboardRepository for SqliteClipboardRepository {
                     "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
                      FROM clipboard_history ch
                      INNER JOIN entry_tags et ON ch.id = et.entry_id
-                      WHERE ch.clipboard_mode = ?1
-                       AND NOT EXISTS (
-                         SELECT 1 FROM entry_tags se
-                         WHERE se.entry_id = ch.id
-                           AND se.tag COLLATE NOCASE IN {}
-                     )
+                       WHERE ch.clipboard_mode = ?1{}
+                        AND NOT EXISTS (
+                          SELECT 1 FROM entry_tags se
+                          WHERE se.entry_id = ch.id
+                            AND se.tag COLLATE NOCASE IN {}
+                      )
                        AND et.tag LIKE '%' || ?2 || '%'
                      ORDER BY ch.timestamp DESC, ch.id DESC
                      LIMIT ?3",
-                    sensitive_tags_sql
+                    type_clause, sensitive_tags_sql
                 )
             } else {
                 format!(
                     "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
                      FROM clipboard_history ch
                      LEFT JOIN entry_tags et ON ch.id = et.entry_id
-                      WHERE ch.clipboard_mode = ?1
-                       AND NOT EXISTS (
-                         SELECT 1 FROM entry_tags se
-                         WHERE se.entry_id = ch.id
-                           AND se.tag COLLATE NOCASE IN {}
-                     )
+                       WHERE ch.clipboard_mode = ?1{}
+                        AND NOT EXISTS (
+                          SELECT 1 FROM entry_tags se
+                          WHERE se.entry_id = ch.id
+                            AND se.tag COLLATE NOCASE IN {}
+                      )
                        AND (
                          ch.content LIKE '%' || ?2 || '%'
                          OR ch.source_app LIKE '%' || ?2 || '%'
@@ -1142,15 +1186,19 @@ impl ClipboardRepository for SqliteClipboardRepository {
                        )
                      ORDER BY ch.timestamp DESC, ch.id DESC
                      LIMIT ?3",
-                    sensitive_tags_sql
+                    type_clause, sensitive_tags_sql
                 )
             };
 
             let mut stmt = conn
                 .prepare(&sql_non_sensitive)
                 .map_err(|e| e.to_string())?;
+            let mut query_params: Vec<&dyn ToSql> = vec![&clipboard_mode, &term, &limit];
+            if let Some(ref ct) = content_type_filter {
+                query_params.push(ct);
+            }
             let rows = stmt
-                .query_map(params![clipboard_mode, term, limit], |row| {
+                .query_map(params_from_iter(query_params), |row| {
                     let tags_str: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
                     let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
                     let content_raw: String = row.get(2)?;
@@ -1198,6 +1246,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
                     "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path, ch.clipboard_mode
                      FROM clipboard_history ch
                       WHERE ch.clipboard_mode = ?1
+                       {}
                        AND (
                          EXISTS (
                              SELECT 1 FROM entry_tags se
@@ -1211,38 +1260,42 @@ impl ClipboardRepository for SqliteClipboardRepository {
                         AND ((ch.timestamp < ?3) OR (ch.timestamp = ?3 AND ch.id < ?4))
                       ORDER BY ch.timestamp DESC, ch.id DESC
                       LIMIT ?5",
-                    sensitive_tags_sql
+                    sensitive_type_clause, sensitive_tags_sql
                 );
 
                 loop {
                     let mut stmt = conn.prepare(&sql_sensitive).map_err(|e| e.to_string())?;
+                    let mut query_params: Vec<&dyn ToSql> = vec![
+                        &clipboard_mode,
+                        &enc_like,
+                        &cursor_ts,
+                        &cursor_id,
+                        &batch_size,
+                    ];
+                    if let Some(ref ct) = content_type_filter {
+                        query_params.push(ct);
+                    }
                     let rows = stmt
-                        .query_map(
-                            params![clipboard_mode, enc_like, cursor_ts, cursor_id, batch_size],
-                            |row| {
-                                let tags_str: String =
-                                    row.get(8).unwrap_or_else(|_| "[]".to_string());
-                                Ok(ClipboardEntry {
-                                    id: row.get(0)?,
-                                    content_type: row.get(1)?,
-                                    content: row.get(2)?, // Encrypted
-                                    html_content: row.get(3).ok(),
-                                    source_app: row.get(4)?,
-                                    timestamp: row.get(5)?,
-                                    preview: row.get(6)?, // Encrypted
-                                    is_pinned: row.get::<_, i32>(7)? == 1,
-                                    tags: serde_json::from_str(&tags_str).unwrap_or_default(),
-                                    use_count: row.get(9).unwrap_or(0),
-                                    is_external: row.get::<_, i32>(10)? == 1,
-                                    pinned_order: row.get(11).unwrap_or(0),
-                                    source_app_path: row.get(12).unwrap_or(None),
-                                    clipboard_mode: row
-                                        .get(13)
-                                        .unwrap_or_else(|_| "daily".to_string()),
-                                    file_preview_exists: true,
-                                })
-                            },
-                        )
+                        .query_map(params_from_iter(query_params), |row| {
+                            let tags_str: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
+                            Ok(ClipboardEntry {
+                                id: row.get(0)?,
+                                content_type: row.get(1)?,
+                                content: row.get(2)?, // Encrypted
+                                html_content: row.get(3).ok(),
+                                source_app: row.get(4)?,
+                                timestamp: row.get(5)?,
+                                preview: row.get(6)?, // Encrypted
+                                is_pinned: row.get::<_, i32>(7)? == 1,
+                                tags: serde_json::from_str(&tags_str).unwrap_or_default(),
+                                use_count: row.get(9).unwrap_or(0),
+                                is_external: row.get::<_, i32>(10)? == 1,
+                                pinned_order: row.get(11).unwrap_or(0),
+                                source_app_path: row.get(12).unwrap_or(None),
+                                clipboard_mode: row.get(13).unwrap_or_else(|_| "daily".to_string()),
+                                file_preview_exists: true,
+                            })
+                        })
                         .map_err(|e| e.to_string())?;
 
                     let mut batch: Vec<ClipboardEntry> = Vec::new();
@@ -1386,7 +1439,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                 "SELECT id FROM clipboard_history
                  WHERE clipboard_mode = ?
                    AND timestamp >= ?
-                   AND is_pinned = 0",
+                   AND is_pinned = 0
+                   AND NOT EXISTS (SELECT 1 FROM entry_tags WHERE entry_id = clipboard_history.id)",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
@@ -1418,7 +1472,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                 "SELECT id FROM clipboard_history
                  WHERE clipboard_mode = ?
                    AND timestamp >= ?
-                   AND is_pinned = 0",
+                   AND is_pinned = 0
+                   AND NOT EXISTS (SELECT 1 FROM entry_tags WHERE entry_id = clipboard_history.id)",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt

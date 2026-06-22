@@ -354,7 +354,9 @@ const App = () => {
     processingAiId,
     setProcessingAiId,
     typeFilter,
-    setTypeFilter
+    setTypeFilter,
+    tagFilter,
+    setTagFilter
   } = appState;
 
   // --- Auto Update Logic ---
@@ -390,6 +392,7 @@ const App = () => {
   const { fetchHistory, loadMoreHistory } = useHistoryFetch({
     debouncedSearch,
     typeFilter,
+    tagFilter,
     persistentLimitEnabled,
     persistentLimit,
     pageSize: PAGE_SIZE,
@@ -1085,7 +1088,8 @@ const App = () => {
   const filteredHistory = useFilteredHistory({
     history,
     search,
-    typeFilter
+    typeFilter,
+    tagFilter
   });
 
   const handleClearRecent = useCallback(
@@ -1122,14 +1126,14 @@ const App = () => {
       },
       confirmLabel: t("delete") || "Delete",
       onConfirm: async (inputValue) => {
-        const match = (inputValue || "").trim().match(/^(\d+)\s*(?:-|~|,|，|至|到)\s*(\d+)$/);
+        const match = (inputValue || "").trim().match(/^(\d+)(?:\s*(?:-|~|,|\u5230|\u81f3)\s*(\d+))?$/);
         if (!match) {
           pushToast(t("clear_index_range_invalid") || "Invalid index range", 2500);
           return;
         }
 
         const start = Number(match[1]);
-        const end = Number(match[2]);
+        const end = Number(match[2] ?? match[1]);
         if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
           pushToast(t("clear_index_range_invalid") || "Invalid index range", 2500);
           return;
@@ -1179,7 +1183,7 @@ const App = () => {
 
   useListSelectionReset({ filteredHistory, setSelectedIndex });
 
-  useSearchFetchTrigger({ debouncedSearch, isComposing, typeFilter, fetchHistory });
+  useSearchFetchTrigger({ debouncedSearch, isComposing, typeFilter, tagFilter, fetchHistory });
 
   useScrollToSelection({
     filteredHistory,
@@ -1325,6 +1329,8 @@ const App = () => {
         showTagFilter={showTagFilter}
         setShowTagFilter={setShowTagFilter}
         allTags={allTags}
+        tagFilter={tagFilter}
+        setTagFilter={setTagFilter}
         searchIsFocused={searchIsFocused}
         setSearchIsFocused={setSearchIsFocused}
         setEditingTagsId={setEditingTagsId}

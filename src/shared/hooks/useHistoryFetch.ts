@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, SetStateAction } from "react";
 import type { ClipboardEntry } from "../types";
+import { buildGetClipboardHistoryParams } from "./historyFetchParams";
 
 interface UseHistoryFetchOptions {
   debouncedSearch: string;
   typeFilter: string | null;
+  tagFilter: string | null;
   persistentLimitEnabled: boolean;
   persistentLimit: number;
   pageSize: number;
@@ -22,6 +24,7 @@ interface UseHistoryFetchOptions {
 export const useHistoryFetch = ({
   debouncedSearch,
   typeFilter,
+  tagFilter,
   persistentLimitEnabled,
   persistentLimit,
   pageSize,
@@ -61,12 +64,18 @@ export const useHistoryFetch = ({
 
         let data: ClipboardEntry[] = [];
 
-        const hasSearch = debouncedSearch && debouncedSearch.trim().length > 0;
+        const trimmedSearch = debouncedSearch.trim();
+        const trimmedTagFilter = tagFilter?.trim() || "";
+        const hasSearch = trimmedSearch.length > 0;
+        const hasTagFilter = trimmedTagFilter.length > 0;
 
-        if (hasSearch) {
-          let term = debouncedSearch;
+        if (hasSearch || hasTagFilter) {
+          let term = trimmedSearch;
           let tagOnly = false;
-          if (term.startsWith("tag:")) {
+          if (hasTagFilter) {
+            term = trimmedTagFilter;
+            tagOnly = true;
+          } else if (term.startsWith("tag:")) {
             term = term.slice(4);
             tagOnly = true;
           }
@@ -75,7 +84,8 @@ export const useHistoryFetch = ({
             data = await invoke<ClipboardEntry[]>("search_clipboard_history", {
               searchTerm: term,
               limit: 200,
-              tagOnly
+              tagOnly,
+              contentType: typeFilter || undefined
             });
           } catch (e) {
             console.error("Search failed, falling back", e);
@@ -89,11 +99,10 @@ export const useHistoryFetch = ({
           setHasMore(false);
         } else {
           const requestedLimit = pageSize + 1; // Use standard page size for DB limit
-          const rawData = await invoke<ClipboardEntry[]>("get_clipboard_history", {
-            limit: requestedLimit,
-            offset: baseOffset,
-            content_type: typeFilter || undefined
-          });
+          const rawData = await invoke<ClipboardEntry[]>(
+            "get_clipboard_history",
+            buildGetClipboardHistoryParams(requestedLimit, baseOffset, typeFilter)
+          );
 
           if (seq !== fetchSeqRef.current) return;
 
@@ -133,6 +142,7 @@ export const useHistoryFetch = ({
     [
       debouncedSearch,
       typeFilter,
+      tagFilter,
       pageSize,
       persistentLimit,
       persistentLimitEnabled,
@@ -145,6 +155,7 @@ export const useHistoryFetch = ({
   const loadMoreHistory = useCallback(async () => {
     if (loadingRef.current || isLoadingMore || !hasMore) return;
     if (debouncedSearch && debouncedSearch.trim().length > 0) return;
+    if (tagFilter && tagFilter.trim().length > 0) return;
 
     const effectiveOffset = Math.min(currentOffsetRef.current, historyLengthRef.current);
     if (lastRequestedOffsetRef.current === effectiveOffset) return;
@@ -158,8 +169,7 @@ export const useHistoryFetch = ({
       loadingRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [debouncedSearch, fetchHistory, hasMore, isLoadingMore, setIsLoadingMore]);
+  }, [debouncedSearch, tagFilter, fetchHistory, hasMore, isLoadingMore, setIsLoadingMore]);
 
   return { fetchHistory, loadMoreHistory };
 };
-

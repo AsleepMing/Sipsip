@@ -280,4 +280,6 @@ export interface AppState {
   setProcessingAiId: StateSetter<number | null>;
   typeFilter: string | null;
   setTypeFilter: StateSetter<string | null>;
+  tagFilter: string | null;
+  setTagFilter: StateSetter<string | null>;
 }

@@ -49,12 +49,10 @@ pub fn get_clipboard_history(
     let current_mode = current_clipboard_mode(&settings);
 
     // 1. Get history from repository
-    let mut history = state.repo.get_history(
-        limit,
-        offset,
-        content_type.as_deref(),
-        &current_mode,
-    )?;
+    let mut history =
+        state
+            .repo
+            .get_history(limit, offset, content_type.as_deref(), &current_mode)?;
 
     // 2. Add session history items (non-persisted) ONLY on the first page
     if offset == 0 {
@@ -136,25 +134,39 @@ pub fn search_clipboard_history(
     search_term: String,
     limit: i32,
     tag_only: Option<bool>,
+    content_type: Option<String>,
 ) -> AppResult<Vec<ClipboardEntry>> {
     let is_tag_only = tag_only.unwrap_or(false);
     let current_mode = current_clipboard_mode(&settings);
-    let mut history = state
-        .repo
-        .search(&search_term, limit, is_tag_only, &current_mode)?;
+    let mut history = state.repo.search(
+        &search_term,
+        limit,
+        is_tag_only,
+        &current_mode,
+        content_type.as_deref(),
+    )?;
 
-    let term = search_term.to_lowercase();
+    let term = search_term.trim().to_lowercase();
     let session_items = session.inner().0.lock().unwrap();
     for item in session_items.iter().rev() {
+        if item.clipboard_mode != current_mode {
+            continue;
+        }
+        if let Some(ct) = content_type.as_deref() {
+            if item.content_type != ct {
+                continue;
+            }
+        }
+
         let matches = if is_tag_only {
             item.tags.iter().any(|t| t.to_lowercase().contains(&term))
         } else {
-            item.clipboard_mode == current_mode && item.content.to_lowercase().contains(&term)
+            item.content.to_lowercase().contains(&term)
                 || item.source_app.to_lowercase().contains(&term)
                 || item.tags.iter().any(|t| t.to_lowercase().contains(&term))
         };
 
-        if matches && item.clipboard_mode == current_mode {
+        if matches {
             if !history.iter().any(|h| h.id == item.id && item.id != 0) {
                 history.push(item.clone());
             }
@@ -417,11 +429,22 @@ pub fn get_all_tags_info(
 
 #[tauri::command]
 pub fn rename_tag_globally(
+    app_handle: AppHandle,
     state: State<'_, DbState>,
     session: State<'_, SessionHistory>,
     old_name: String,
     new_name: String,
 ) -> AppResult<()> {
+    let should_sync = state
+        .tag_repo
+        .get_entries_by_tag(&old_name)
+        .map(|entries| {
+            entries
+                .iter()
+                .any(|entry| normalize_clipboard_mode(&entry.clipboard_mode) == "daily")
+        })
+        .unwrap_or(false);
+
     {
         let mut session_items = session.inner().0.lock().unwrap();
         for item in session_items.iter_mut() {
@@ -438,26 +461,51 @@ pub fn rename_tag_globally(
     state
         .tag_repo
         .rename(&old_name, &new_name)
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+    let _ = app_handle.emit("tags-changed", ());
+    let _ = app_handle.emit("clipboard-changed", ());
+    if should_sync {
+        crate::services::cloud_sync::request_cloud_sync(app_handle);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub fn delete_tag_from_all(
+    app_handle: AppHandle,
     state: State<'_, DbState>,
     session: State<'_, SessionHistory>,
     app_data: State<'_, AppDataDir>,
     tag_name: String,
 ) -> AppResult<()> {
+    let should_sync = state
+        .tag_repo
+        .get_entries_by_tag(&tag_name)
+        .map(|entries| {
+            entries
+                .iter()
+                .any(|entry| normalize_clipboard_mode(&entry.clipboard_mode) == "daily")
+        })
+        .unwrap_or(false);
+
     {
         let mut session_items = session.inner().0.lock().unwrap();
-        session_items.retain(|item| !item.tags.contains(&tag_name));
+        for item in session_items.iter_mut() {
+            item.tags.retain(|tag| tag != &tag_name);
+        }
     }
 
     let data_dir = app_data.0.lock().unwrap();
     state
         .tag_repo
         .delete_globally(&tag_name, Some(&data_dir))
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+    let _ = app_handle.emit("tags-changed", ());
+    let _ = app_handle.emit("clipboard-changed", ());
+    if should_sync {
+        crate::services::cloud_sync::request_cloud_sync(app_handle);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -561,7 +609,10 @@ pub fn clear_recent_clipboard_history(
         let mut session_items = session.inner().0.lock().unwrap();
         let before = session_items.len();
         session_items.retain(|item| {
-            item.clipboard_mode != current_mode || item.timestamp < cutoff || item.is_pinned
+            item.clipboard_mode != current_mode
+                || item.timestamp < cutoff
+                || item.is_pinned
+                || !item.tags.is_empty()
         });
         removed += before.saturating_sub(session_items.len());
     }

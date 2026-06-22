@@ -4,6 +4,7 @@ interface UseSearchFetchTriggerOptions {
   debouncedSearch: string;
   isComposing: boolean;
   typeFilter?: string | null;
+  tagFilter?: string | null;
   fetchHistory: (reset?: boolean) => void;
 }
 
@@ -11,6 +12,7 @@ export const useSearchFetchTrigger = ({
   debouncedSearch,
   isComposing,
   typeFilter,
+  tagFilter,
   fetchHistory
 }: UseSearchFetchTriggerOptions) => {
   useEffect(() => {
@@ -21,5 +23,5 @@ export const useSearchFetchTrigger = ({
 
   useEffect(() => {
     fetchHistory(true);
-  }, [typeFilter, fetchHistory]);
+  }, [typeFilter, tagFilter, fetchHistory]);
 };
