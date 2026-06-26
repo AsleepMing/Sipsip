@@ -46,42 +46,57 @@ pub fn toggle_clipboard_pin(
     app_data_dir: State<'_, AppDataDir>,
     id: i64,
     is_pinned: bool,
-) -> AppResult<i64> {
+) -> AppResult<database::ClipboardEntry> {
     let mut real_id = id;
-    let mut entry_to_save = None;
     let mut saved_mode = None;
 
-    {
-        let mut session_items = session.inner().0.lock().unwrap();
-        if let Some(item) = session_items.iter_mut().find(|i| i.id == id) {
-            item.is_pinned = is_pinned;
-            if id < 0 && is_pinned {
-                entry_to_save = Some(item.clone());
-            }
-        }
+    if id < 0 && !is_pinned {
+        let updated = {
+            let mut session_items = session.inner().0.lock().unwrap();
+            let item = session_items
+                .iter_mut()
+                .find(|item| item.id == id)
+                .ok_or_else(|| AppError::Validation("Session entry not found".to_string()))?;
+            item.is_pinned = false;
+            item.pinned_order = 0;
+            item.clone()
+        };
+        let _ = app_handle.emit("clipboard-changed", ());
+        return Ok(updated);
     }
 
     let conn = state.conn.lock().unwrap();
 
-    if let Some(entry) = entry_to_save {
+    if id < 0 {
+        let mut entry = {
+            let session_items = session.inner().0.lock().unwrap();
+            session_items
+                .iter()
+                .find(|item| item.id == id)
+                .cloned()
+                .ok_or_else(|| AppError::Validation("Session entry not found".to_string()))?
+        };
+        entry.is_pinned = is_pinned;
         let data_dir = app_data_dir.0.lock().unwrap().clone();
-        if let Ok(new_id) = state.repo.save_with_conn(&conn, &entry, Some(&data_dir)) {
-            real_id = new_id;
-            saved_mode = Some(entry.clipboard_mode.clone());
-            if let Ok(deleted_ids) =
-                state
-                    .repo
-                    .enforce_limit_with_conn(&conn, Some(&data_dir), &entry.clipboard_mode)
-            {
-                for deleted_id in deleted_ids {
-                    let _ = app_handle.emit("clipboard-removed", deleted_id);
-                }
+        let new_id = state
+            .repo
+            .save_with_conn(&conn, &entry, Some(&data_dir))
+            .map_err(AppError::from)?;
+        real_id = new_id;
+        saved_mode = Some(entry.clipboard_mode.clone());
+        if let Ok(deleted_ids) =
+            state
+                .repo
+                .enforce_limit_with_conn(&conn, Some(&data_dir), &entry.clipboard_mode)
+        {
+            for deleted_id in deleted_ids {
+                let _ = app_handle.emit("clipboard-removed", deleted_id);
             }
-            {
-                let mut session_items = session.inner().0.lock().unwrap();
-                if let Some(item) = session_items.iter_mut().find(|i| i.id == id) {
-                    item.id = new_id;
-                }
+        }
+        {
+            let mut session_items = session.inner().0.lock().unwrap();
+            if let Some(item) = session_items.iter_mut().find(|i| i.id == id) {
+                item.id = new_id;
             }
         }
     }
@@ -91,6 +106,13 @@ pub fn toggle_clipboard_pin(
             .repo
             .toggle_pin_with_conn(&conn, real_id, is_pinned)
             .map_err(AppError::from)?;
+        let mut session_items = session.inner().0.lock().unwrap();
+        if let Some(item) = session_items.iter_mut().find(|item| item.id == real_id) {
+            item.is_pinned = is_pinned;
+            if !is_pinned {
+                item.pinned_order = 0;
+            }
+        }
     }
     drop(conn);
     let _ = app_handle.emit("clipboard-changed", ());
@@ -102,7 +124,21 @@ pub fn toggle_clipboard_pin(
     if should_sync {
         crate::services::cloud_sync::request_cloud_sync(app_handle);
     }
-    Ok(real_id)
+
+    if real_id > 0 {
+        return state
+            .repo
+            .get_entry_by_id(real_id)
+            .map_err(AppError::from)?
+            .ok_or_else(|| AppError::Validation("Entry not found after pin update".to_string()));
+    }
+
+    let session_items = session.inner().0.lock().unwrap();
+    session_items
+        .iter()
+        .find(|item| item.id == real_id)
+        .cloned()
+        .ok_or_else(|| AppError::Validation("Session entry not found after pin update".to_string()))
 }
 
 #[tauri::command]

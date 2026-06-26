@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ClipboardEntry } from "../types";
+import { sortClipboardEntries } from "../lib/clipboardSort";
 
 interface UseFilteredHistoryOptions {
   history: ClipboardEntry[];
@@ -46,17 +47,6 @@ export const useFilteredHistory = ({
       );
     });
 
-    return filtered.sort((a, b) => {
-      if (a.is_pinned !== b.is_pinned) {
-        return a.is_pinned ? -1 : 1;
-      }
-      if (a.is_pinned) {
-        if ((a.pinned_order || 0) !== (b.pinned_order || 0)) {
-          return (b.pinned_order || 0) - (a.pinned_order || 0);
-        }
-        return b.timestamp - a.timestamp;
-      }
-      return b.timestamp - a.timestamp;
-    });
+    return sortClipboardEntries(filtered);
   }, [history, search, typeFilter, tagFilter]);
 };

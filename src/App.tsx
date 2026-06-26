@@ -49,6 +49,7 @@ import { useAutoUpdate } from "./shared/hooks/useAutoUpdate";
 import UpdateDialog from "./shared/components/UpdateDialog";
 import ClipboardDetailModal from "./features/clipboard/components/ClipboardDetailModal";
 import { supportsCustomBackground } from "./shared/config/themes";
+import { sortClipboardEntries } from "./shared/lib/clipboardSort";
 import { chooseCustomBackgroundImage } from "./shared/lib/customBackground";
 import type { ClipboardEntry } from "./shared/types";
 import type { QuickPasteHint, VirtualClipboardListHandle } from "./features/clipboard/types";
@@ -68,34 +69,7 @@ import { isTauriRuntime } from "./shared/lib/tauriRuntime";
 const normalizeClipboardMode = (mode?: string): ClipboardMode => (mode === "work" ? "work" : "daily");
 
 const insertHistoryItem = (list: ClipboardEntry[], item: ClipboardEntry) => {
-  const next = list.slice();
-  const isPinned = !!item.is_pinned;
-  let insertIndex = 0;
-
-  if (isPinned) {
-    while (insertIndex < next.length) {
-      const current = next[insertIndex];
-      if (!current.is_pinned) break;
-      if (current.timestamp < item.timestamp) break;
-      insertIndex++;
-    }
-  } else {
-    while (insertIndex < next.length && next[insertIndex].is_pinned) {
-      insertIndex++;
-    }
-    while (insertIndex < next.length) {
-      const current = next[insertIndex];
-      if (current.is_pinned) {
-        insertIndex++;
-        continue;
-      }
-      if (current.timestamp < item.timestamp) break;
-      insertIndex++;
-    }
-  }
-
-  next.splice(insertIndex, 0, item);
-  return next;
+  return sortClipboardEntries([...list, item]);
 };
 
 const buildSnippetTitle = (content: string) => {

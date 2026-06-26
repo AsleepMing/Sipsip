@@ -30,6 +30,22 @@ fn is_syncable_content_type(content_type: &str) -> bool {
     )
 }
 
+fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut cleaned_tags: Vec<String> = Vec::new();
+    for tag in tags {
+        let t = tag.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let t_owned = t.to_string();
+        if seen.insert(t_owned.clone()) {
+            cleaned_tags.push(t_owned);
+        }
+    }
+    cleaned_tags
+}
+
 pub trait ClipboardRepository {
     fn save(
         &self,
@@ -345,8 +361,24 @@ impl SqliteClipboardRepository {
         entry: &ClipboardEntry,
         data_dir: Option<&std::path::Path>,
     ) -> Result<i64, String> {
+        let mut cleaned_tags = normalize_tags(&entry.tags);
+        if entry.id > 0 && cleaned_tags.is_empty() {
+            let existing_tags_json: Option<String> = conn
+                .query_row(
+                    "SELECT tags FROM clipboard_history WHERE id = ?",
+                    params![entry.id],
+                    |row| row.get(0),
+                )
+                .ok();
+            if let Some(tags_json) = existing_tags_json {
+                let existing_tags: Vec<String> =
+                    serde_json::from_str(&tags_json).unwrap_or_default();
+                cleaned_tags = normalize_tags(&existing_tags);
+            }
+        }
+
         // Encrypt only when explicitly marked as sensitive
-        let should_encrypt = has_sensitive_tag(&entry.tags);
+        let should_encrypt = has_sensitive_tag(&cleaned_tags);
 
         let mut final_content = entry.content.clone();
         let mut final_is_external = entry.is_external;
@@ -407,23 +439,11 @@ impl SqliteClipboardRepository {
             )
         };
 
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut cleaned_tags: Vec<String> = Vec::new();
-        for tag in &entry.tags {
-            let t = tag.trim();
-            if t.is_empty() {
-                continue;
-            }
-            let t_owned = t.to_string();
-            if seen.insert(t_owned.clone()) {
-                cleaned_tags.push(t_owned);
-            }
-        }
-
         if entry.id > 0 {
             // Update existing entry (Move to top logic)
-            conn.execute(
-                "UPDATE clipboard_history SET
+            let affected = conn
+                .execute(
+                    "UPDATE clipboard_history SET
                     content_type = ?1,
                     content = ?2,
                     html_content = ?3,
@@ -437,22 +457,28 @@ impl SqliteClipboardRepository {
                     clipboard_mode = ?11,
                     use_count = use_count + 1
                  WHERE id = ?12",
-                params![
-                    entry.content_type,
-                    content,
-                    html_content,
-                    entry.source_app,
-                    entry.timestamp,
-                    preview,
-                    content_hash,
-                    serde_json::to_string(&cleaned_tags).unwrap_or_else(|_| "[]".to_string()),
-                    if final_is_external { 1 } else { 0 },
-                    entry.source_app_path.as_deref(),
-                    entry.clipboard_mode.as_str(),
+                    params![
+                        entry.content_type,
+                        content,
+                        html_content,
+                        entry.source_app,
+                        entry.timestamp,
+                        preview,
+                        content_hash,
+                        serde_json::to_string(&cleaned_tags).unwrap_or_else(|_| "[]".to_string()),
+                        if final_is_external { 1 } else { 0 },
+                        entry.source_app_path.as_deref(),
+                        entry.clipboard_mode.as_str(),
+                        entry.id
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+            if affected == 0 {
+                return Err(format!(
+                    "clipboard entry not found for update: {}",
                     entry.id
-                ],
-            )
-            .map_err(|e| e.to_string())?;
+                ));
+            }
             self.sync_entry_tags_with_conn(conn, entry.id, &cleaned_tags)?;
             Ok(entry.id)
         } else {
@@ -733,19 +759,26 @@ impl SqliteClipboardRepository {
     ) -> Result<(), String> {
         if is_pinned {
             // Set pinned_order to max + 1 so it appears at top
-            conn.execute(
+            let affected = conn.execute(
                 "UPDATE clipboard_history
                  SET is_pinned = 1,
                      pinned_order = (SELECT COALESCE(MAX(pinned_order), 0) + 1 FROM clipboard_history WHERE is_pinned = 1)
                  WHERE id = ?",
                 params![id],
             ).map_err(|e| e.to_string())?;
+            if affected == 0 {
+                return Err(format!("clipboard entry not found for pin update: {}", id));
+            }
         } else {
-            conn.execute(
-                "UPDATE clipboard_history SET is_pinned = 0, pinned_order = 0 WHERE id = ?",
-                params![id],
-            )
-            .map_err(|e| e.to_string())?;
+            let affected = conn
+                .execute(
+                    "UPDATE clipboard_history SET is_pinned = 0, pinned_order = 0 WHERE id = ?",
+                    params![id],
+                )
+                .map_err(|e| e.to_string())?;
+            if affected == 0 {
+                return Err(format!("clipboard entry not found for pin update: {}", id));
+            }
         }
         Ok(())
     }

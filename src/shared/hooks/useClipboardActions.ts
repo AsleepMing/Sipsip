@@ -4,6 +4,7 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ClipboardEntry } from "../types";
 import type { VirtualClipboardListHandle } from "../../features/clipboard/types";
+import { sortClipboardEntries } from "../lib/clipboardSort";
 
 interface UseClipboardActionsOptions {
   t: (key: string) => string;
@@ -101,16 +102,13 @@ export const useClipboardActions = ({
     async (e: ReactMouseEvent, id: number, currentPinned: boolean) => {
       e.stopPropagation();
       try {
-        const newId = await invoke<number>("toggle_clipboard_pin", { id, isPinned: !currentPinned });
+        const updatedItem = await invoke<ClipboardEntry>("toggle_clipboard_pin", { id, isPinned: !currentPinned });
         setHistory((prev) =>
-          prev
-            .map((item) =>
-              item.id === id ? { ...item, id: newId, is_pinned: !currentPinned } : item
+          sortClipboardEntries(
+            prev.map((item) =>
+              item.id === id ? updatedItem : item
             )
-            .sort((a, b) => {
-              if (a.is_pinned === b.is_pinned) return b.timestamp - a.timestamp;
-              return a.is_pinned ? -1 : 1;
-            })
+          )
         );
       } catch (err) {
         const errorMsg =

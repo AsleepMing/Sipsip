@@ -19,6 +19,25 @@
 
 Sipsip is a desktop clipboard manager built with Tauri, Rust, and React, designed for high-frequency daily work. All clipboard data is stored locally with fast search, tag organization, and convenient paste workflows. It provides Daily / Work mode isolation to keep temporary work content separate from your everyday clipboard.
 
+## v1.0.6 Fix
+
+v1.0.6 fixes Work-mode pinned items appearing to unpin themselves after later clipboard refreshes.
+
+- Duplicate-content merge and same-content recapture now preserve the existing pinned state, pinned order, and tags.
+- When persistent storage is disabled, protected Work-mode records that are pinned or tagged are reused from the database instead of being overwritten by new unpinned session items.
+- The pin command now returns the backend's real clipboard entry and reports an error when no database row was updated, preventing false-success UI state.
+
+## v1.0.6 Fix: Work-Mode Pinned State Loss
+
+v1.0.6 fixes Work-mode pinned items appearing to lose their pinned state after duplicate-content refreshes or later clipboard recaptures.
+
+- Preserved existing `is_pinned`, `pinned_order`, and tags when duplicate-content handling reuses an existing clipboard row.
+- Reused protected database rows for pinned/tagged Work-mode records even when global persistent storage is disabled.
+- `toggle_clipboard_pin` now returns the backend's full clipboard entry, so the frontend updates from persisted state instead of optimistic local guesses.
+- Centralized frontend clipboard ordering: event inserts, filtering, pin toggles, and drag reordering all respect the same pinned-order rules.
+- Added affected-row checks for pin updates and existing-row saves to prevent false-success UI state.
+- Non-persistent session trimming now removes ordinary transient items before protected pinned/tagged records.
+
 ## v1.0.5 Fix
 
 v1.0.5 fixes rich-text category visible-index range deletion appearing to succeed while items still remain in the list.
@@ -143,6 +162,12 @@ On Windows with the current bundle configuration, the release executable is gene
 src-tauri/target/release/sipsip.exe
 ```
 
+Current Windows portable package output:
+
+```text
+dist/release/Sipsip-v1.0.6-windows-portable.zip
+```
+
 ## Independent Release Setup
 
 Before publishing this fork on your own GitHub, review:
@@ -150,6 +175,8 @@ Before publishing this fork on your own GitHub, review:
 - `.env.example`
 - `src/shared/config/brand.ts`
 - `src-tauri/tauri.conf.json`
+- `docs/releases/v1.0.6.md`
+- `docs/releases/v1.0.6.md`
 - `docs/releases/v1.0.5.md`
 - `docs/releases/v1.0.4.md`
 - `docs/releases/v1.0.3.md`
@@ -171,6 +198,8 @@ Recommended release setup:
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.0.6 | 2026-06-26 | Fix Work-mode pinned state being overwritten by duplicate refreshes |
+| v1.0.6 | 2026-06-26 | Fix Work-mode pinned state loss, centralize clipboard sort logic |
 | v1.0.5 | 2026-06-22 | Fix rich-text category range deletion refresh mismatch |
 | v1.0.4 | 2026-06-22 | Tag/search/delete regression verification, language key consistency fix, Windows portable package |
 | v1.0.3 | 2026-06-19 | Batch deletion performance, input focus fix, work-mode isolation hardening |

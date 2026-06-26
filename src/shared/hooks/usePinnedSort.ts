@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, SetStateAction } from "react";
 import type { ClipboardEntry } from "../types";
+import { sortClipboardEntries } from "../lib/clipboardSort";
 
 interface UsePinnedSortOptions {
   filteredHistory: ClipboardEntry[];
@@ -28,23 +29,13 @@ export const usePinnedSort = ({
         orderMap.set(id, newOrderIds.length - index);
       });
 
-      const nextHistory = history.map((item) => {
+      const nextHistory = sortClipboardEntries(history.map((item) => {
         const nextOrder = orderMap.get(item.id);
         if (nextOrder !== undefined) {
           return { ...item, pinned_order: nextOrder };
         }
         return item;
-      });
-
-      nextHistory.sort((a, b) => {
-        if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
-        if (a.is_pinned) {
-          if ((a.pinned_order || 0) !== (b.pinned_order || 0)) {
-            return (b.pinned_order || 0) - (a.pinned_order || 0);
-          }
-        }
-        return b.timestamp - a.timestamp;
-      });
+      }));
 
       setHistory(nextHistory);
 
@@ -60,5 +51,4 @@ export const usePinnedSort = ({
     handlePinnedReorder
   };
 };
-
 

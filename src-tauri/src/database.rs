@@ -672,6 +672,77 @@ mod tests {
     }
 
     #[test]
+    fn test_save_existing_preserves_work_pinned_state_and_tags() {
+        let conn = setup_test_db();
+        let conn_arc = Arc::new(Mutex::new(conn));
+        let repo = SqliteClipboardRepository::new(conn_arc);
+
+        let entry = ClipboardEntry {
+            id: 0,
+            content_type: "text".to_string(),
+            content: "work pinned text".to_string(),
+            html_content: None,
+            source_app: "TestApp".to_string(),
+            source_app_path: None,
+            timestamp: 100,
+            preview: "work pinned text".to_string(),
+            is_pinned: true,
+            tags: vec!["important".to_string()],
+            use_count: 0,
+            is_external: false,
+            pinned_order: 7,
+            clipboard_mode: "work".to_string(),
+            file_preview_exists: true,
+        };
+        let id = repo
+            .save(&entry, None)
+            .expect("save pinned work entry failed");
+
+        let duplicate = ClipboardEntry {
+            id,
+            content_type: "text".to_string(),
+            content: "work pinned text".to_string(),
+            html_content: None,
+            source_app: "TestApp2".to_string(),
+            source_app_path: None,
+            timestamp: 200,
+            preview: "work pinned text".to_string(),
+            is_pinned: false,
+            tags: vec![],
+            use_count: 0,
+            is_external: false,
+            pinned_order: 0,
+            clipboard_mode: "work".to_string(),
+            file_preview_exists: true,
+        };
+        repo.save(&duplicate, None)
+            .expect("update existing work entry failed");
+
+        let saved = repo
+            .get_entry_by_id(id)
+            .expect("get updated work entry failed")
+            .expect("updated work entry missing");
+        assert!(saved.is_pinned);
+        assert_eq!(saved.pinned_order, 7);
+        assert_eq!(saved.tags, vec!["important".to_string()]);
+        assert_eq!(saved.timestamp, 200);
+    }
+
+    #[test]
+    fn test_toggle_pin_missing_entry_returns_error() {
+        let conn = setup_test_db();
+        let conn_arc = Arc::new(Mutex::new(conn));
+        let repo = SqliteClipboardRepository::new(conn_arc);
+
+        let result = repo.toggle_pin(404, true);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("clipboard entry not found for pin update"));
+    }
+
+    #[test]
     fn test_settings_persistence() {
         let conn = setup_test_db();
         let conn_arc = Arc::new(Mutex::new(conn));

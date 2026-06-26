@@ -29,6 +29,7 @@ pub struct PipelineContext {
     pub should_stop: bool,
     pub pending_removals: Vec<i64>,
     pub reuse_session_id: Option<i64>,
+    pub reuse_persistent_id: Option<i64>,
 }
 
 impl PipelineContext {
@@ -53,12 +54,21 @@ impl PipelineContext {
             should_stop: false,
             pending_removals: Vec::new(),
             reuse_session_id: None,
+            reuse_persistent_id: None,
         }
     }
 }
 
 pub trait PipelineStage {
     fn process(&self, context: &mut PipelineContext);
+}
+
+fn apply_existing_protected_state(entry: &mut ClipboardEntry, existing: &ClipboardEntry) {
+    entry.is_pinned = existing.is_pinned;
+    entry.pinned_order = existing.pinned_order;
+    if entry.tags.is_empty() {
+        entry.tags = existing.tags.clone();
+    }
 }
 
 pub struct ClipboardPipeline {
@@ -421,6 +431,18 @@ impl PipelineStage for ValidationStage {
                     // This ensures the item is "moved to top" without risking data loss
                     let entry_mut = ctx.entry.as_mut().unwrap();
                     entry_mut.id = id;
+                    if let Ok(Some(existing)) = db_state.repo.get_entry_by_id_with_conn(&conn, id) {
+                        apply_existing_protected_state(entry_mut, &existing);
+                    }
+                }
+            } else if let Some(id) = existing_id {
+                if let Ok(Some(existing)) = db_state.repo.get_entry_by_id_with_conn(&conn, id) {
+                    if existing.is_pinned || !existing.tags.is_empty() {
+                        let entry_mut = ctx.entry.as_mut().unwrap();
+                        entry_mut.id = id;
+                        apply_existing_protected_state(entry_mut, &existing);
+                        ctx.reuse_persistent_id = Some(id);
+                    }
                 }
             }
 
@@ -461,13 +483,15 @@ impl PipelineStage for ValidationStage {
                     let match_found = image_match || text_match;
                     if match_found {
                         removed_ids.push(item.id);
-                        if !persistent_enabled {
+                        if !persistent_enabled && ctx.reuse_persistent_id.is_none() {
                             reuse_session_id = Some(item.id);
                         }
                     }
                 }
             }
-            if !persistent_enabled {
+            if let Some(persistent_id) = ctx.reuse_persistent_id {
+                removed_ids.retain(|id| *id != persistent_id);
+            } else if !persistent_enabled {
                 if let Some(reuse_id) = reuse_session_id {
                     ctx.reuse_session_id = Some(reuse_id);
                     if let Some(entry_mut) = ctx.entry.as_mut() {
@@ -489,21 +513,34 @@ impl PipelineStage for PersistenceStage {
         let settings = ctx.app_handle.state::<SettingsState>();
         let db_state = ctx.app_handle.state::<DbState>();
 
-        if settings.persistent.load(Ordering::Relaxed) {
+        let persist_to_db =
+            settings.persistent.load(Ordering::Relaxed) || ctx.reuse_persistent_id.is_some();
+
+        if persist_to_db {
             let app_data_dir = ctx.app_handle.state::<AppDataDir>();
             let data_dir = app_data_dir.0.lock().unwrap().clone();
             let conn = db_state.conn.lock().unwrap();
 
             if let Ok(id) = db_state.repo.save_with_conn(&conn, entry, Some(&data_dir)) {
                 entry.id = id;
-                if let Ok(deleted_ids) = db_state
-                    .repo
-                    .enforce_limit_with_conn(&conn, Some(&data_dir), &entry.clipboard_mode)
-                {
+                if let Ok(Some(saved)) = db_state.repo.get_entry_by_id_with_conn(&conn, id) {
+                    *entry = saved;
+                }
+                if let Ok(deleted_ids) = db_state.repo.enforce_limit_with_conn(
+                    &conn,
+                    Some(&data_dir),
+                    &entry.clipboard_mode,
+                ) {
                     for rid in deleted_ids {
                         let _ = ctx.app_handle.emit("clipboard-removed", rid);
                     }
                 }
+            }
+
+            if ctx.reuse_persistent_id.is_some() {
+                let session_history = ctx.app_handle.state::<SessionHistory>();
+                let mut session = session_history.0.lock().unwrap();
+                session.retain(|item| item.id != entry.id);
             }
         } else {
             // Session-only items
@@ -557,10 +594,23 @@ impl PipelineStage for PersistenceStage {
             let session_history = ctx.app_handle.state::<SessionHistory>();
             let mut session = session_history.0.lock().unwrap();
             session.push_back(entry.clone());
-            if session.len() > 500 {
-                if let Some(removed) = session.pop_front() {
-                    let _ = ctx.app_handle.emit("clipboard-removed", removed.id);
+            while session.len() > 500 {
+                if let Some(index) = session
+                    .iter()
+                    .position(|item| item.id < 0 && !item.is_pinned && item.tags.is_empty())
+                {
+                    if let Some(removed) = session.remove(index) {
+                        let _ = ctx.app_handle.emit("clipboard-removed", removed.id);
+                    }
+                    continue;
                 }
+
+                if let Some(index) = session.iter().position(|item| item.id > 0) {
+                    let _ = session.remove(index);
+                    continue;
+                }
+
+                break;
             }
         }
     }
@@ -617,7 +667,10 @@ impl PipelineStage for DistributionStage {
             .app_handle
             .emit("clipboard-updated", truncate_entry_for_ui(entry.clone()));
 
-        if settings.persistent.load(Ordering::Relaxed) && entry.id > 0 && entry.clipboard_mode == "daily" {
+        if (settings.persistent.load(Ordering::Relaxed) || ctx.reuse_persistent_id.is_some())
+            && entry.id > 0
+            && entry.clipboard_mode == "daily"
+        {
             crate::services::cloud_sync::request_cloud_sync(ctx.app_handle.clone());
         }
     }
